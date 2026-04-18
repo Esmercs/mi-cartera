@@ -46,6 +46,7 @@ export interface Card {
   card_type: CardType
   last_four: string | null
   current_balance: number
+  credit_limit: number
   is_active: boolean
   created_at: string
 }

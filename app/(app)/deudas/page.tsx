@@ -44,7 +44,10 @@ export default async function DeudasPage() {
   const { end: nextEnd } = getNextPeriodDates()
   const nextPeriodStr = format(nextEnd, 'yyyy-MM-dd')
 
-  const totalDebt = (cards ?? []).reduce((s, c) => s + c.current_balance, 0)
+  const creditCards = (cards ?? []).filter(c => c.card_type === 'credit')
+  const totalDebt    = (cards ?? []).reduce((s, c) => s + c.current_balance, 0)
+  const totalLimit   = creditCards.reduce((s, c) => s + c.credit_limit, 0)
+  const totalUsedPct = totalLimit > 0 ? Math.round((totalDebt / totalLimit) * 100) : null
 
   // Agrupar pagos por quincena
   const periodMap = new Map<string, ScheduledPayment[]>()
@@ -73,6 +76,7 @@ export default async function DeudasPage() {
 
       {/* Tarjetas con saldo */}
       <section className="card p-4 md:p-5 space-y-3">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-gray-800 text-sm">Deuda en tarjetas</h2>
           <div className="flex items-center gap-3">
@@ -81,31 +85,82 @@ export default async function DeudasPage() {
           </div>
         </div>
 
+        {/* Barra de uso general */}
+        {totalUsedPct !== null && (
+          <div className="bg-gray-50 rounded-xl p-3 space-y-1.5">
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-500">Uso total de crédito</span>
+              <span className={`font-semibold ${totalUsedPct >= 80 ? 'text-red-600' : totalUsedPct >= 50 ? 'text-orange-500' : 'text-green-600'}`}>
+                {totalUsedPct}%
+              </span>
+            </div>
+            <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  totalUsedPct >= 80 ? 'bg-red-500' : totalUsedPct >= 50 ? 'bg-orange-400' : 'bg-green-500'
+                }`}
+                style={{ width: `${Math.min(totalUsedPct, 100)}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-400 text-right">
+              {formatMXN(totalDebt)} de {formatMXN(totalLimit)} disponible
+            </p>
+          </div>
+        )}
+
         {!cards?.length ? (
           <p className="text-sm text-gray-400">Sin tarjetas registradas.</p>
         ) : (
-          <div className="space-y-2">
-            {cards.map(card => (
-              <div key={card.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-800">{card.name}</p>
-                  {card.last_four && (
-                    <p className="text-xs text-gray-400">···· {card.last_four}</p>
+          <div className="space-y-3">
+            {cards.map(card => {
+              const usedPct = card.credit_limit > 0
+                ? Math.round((card.current_balance / card.credit_limit) * 100)
+                : null
+              return (
+                <div key={card.id} className="py-2 border-b last:border-0">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-800">{card.name}</p>
+                      {card.last_four && (
+                        <p className="text-xs text-gray-400">···· {card.last_four}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="text-right">
+                        <span className={`text-sm font-bold ${card.current_balance > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                          {formatMXN(card.current_balance)}
+                        </span>
+                        {card.credit_limit > 0 && (
+                          <p className="text-xs text-gray-400">de {formatMXN(card.credit_limit)}</p>
+                        )}
+                      </div>
+                      <UpdateCardBalanceForm
+                        cardId={card.id}
+                        cardName={card.name}
+                        currentBalance={card.current_balance}
+                        creditLimit={card.credit_limit}
+                      />
+                      <DeleteCardButton id={card.id} name={card.name} />
+                    </div>
+                  </div>
+                  {usedPct !== null && (
+                    <div className="mt-1.5 space-y-0.5">
+                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${
+                            usedPct >= 80 ? 'bg-red-500' : usedPct >= 50 ? 'bg-orange-400' : 'bg-green-500'
+                          }`}
+                          style={{ width: `${Math.min(usedPct, 100)}%` }}
+                        />
+                      </div>
+                      <p className={`text-[10px] text-right ${usedPct >= 80 ? 'text-red-500' : 'text-gray-400'}`}>
+                        {usedPct}% utilizado
+                      </p>
+                    </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={`text-sm font-bold ${card.current_balance > 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                    {formatMXN(card.current_balance)}
-                  </span>
-                  <UpdateCardBalanceForm
-                    cardId={card.id}
-                    cardName={card.name}
-                    currentBalance={card.current_balance}
-                  />
-                  <DeleteCardButton id={card.id} name={card.name} />
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </section>
