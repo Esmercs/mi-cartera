@@ -8,6 +8,7 @@ import type { PeriodSummary, InstallmentPlan, InterPersonDebt, IncomeConfig, Sch
 import AddPeriodPaymentForm from '@/components/dashboard/add-period-payment-form'
 import PeriodPaymentsList from '@/components/dashboard/period-payments-list'
 import AddIncomeForm from '@/components/dashboard/add-income-form'
+import RegisterNextPaymentButton from '@/components/dashboard/register-next-payment-button'
 
 export default async function DashboardPage() {
   const supabase = createServerClient()
@@ -129,25 +130,29 @@ export default async function DashboardPage() {
     .lte('next_payment_date', nextPeriodStr) as { data: InstallmentPlan[] | null }
 
   // Unificar en una lista ordenada por monto descendente
-  type NextItem = { key: string; concept: string; amount: number; card: string | null; type: 'fijo' | 'msi' | 'programado' }
+  type NextItem = {
+    key: string; concept: string; amount: number; card: string | null
+    type: 'fijo' | 'msi' | 'programado'
+    cardId: string | null; planId: string | null; scheduledId: string | null
+  }
   const nextItems: NextItem[] = [
     ...(nextScheduled ?? []).map(p => ({
-      key: p.id, concept: p.concept,
-      amount: p.amount,
+      key: p.id, concept: p.concept, amount: p.amount,
       card: (p as any).cards?.name ?? null,
       type: 'programado' as const,
+      cardId: p.card_id ?? null, planId: null, scheduledId: p.id,
     })),
     ...(nextFijos ?? []).map(e => ({
       key: e.id, concept: e.concept,
       amount: e.ownership === 'shared' ? (isLalo ? e.lalo_amount : e.ale_amount) : e.total_amount,
-      card: null,
-      type: 'fijo' as const,
+      card: null, type: 'fijo' as const,
+      cardId: null, planId: null, scheduledId: null,
     })),
     ...(nextMSI ?? []).map(p => ({
-      key: p.id, concept: p.concept,
-      amount: p.monthly_amount,
+      key: p.id, concept: p.concept, amount: p.monthly_amount,
       card: (p as any).cards?.name ?? null,
       type: 'msi' as const,
+      cardId: p.card_id ?? null, planId: p.id, scheduledId: null,
     })),
   ].sort((a, b) => b.amount - a.amount)
 
@@ -241,7 +246,18 @@ export default async function DashboardPage() {
                       {item.card && <span className="text-xs text-gray-400 truncate">{item.card}</span>}
                     </div>
                   </div>
-                  <span className="text-sm font-semibold text-gray-800 shrink-0">{formatMXN(item.amount)}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm font-semibold text-gray-800">{formatMXN(item.amount)}</span>
+                    <RegisterNextPaymentButton
+                      periodId={period?.id ?? ''}
+                      concept={item.concept}
+                      amount={item.amount}
+                      cardId={item.cardId}
+                      type={item.type}
+                      planId={item.planId}
+                      scheduledId={item.scheduledId}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
