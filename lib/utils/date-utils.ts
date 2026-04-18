@@ -58,6 +58,26 @@ export function getCurrentPeriodDates(): { start: Date; end: Date; label: string
   }
 }
 
+export function getNextPeriodDates(): { start: Date; end: Date; label: string } {
+  const now = new Date()
+  const day = now.getDate()
+  const year = now.getFullYear()
+  const month = now.getMonth()
+
+  if (day <= 15) {
+    const start = new Date(year, month, 16)
+    const end = new Date(year, month + 1, 0)
+    return { start, end, label: `16–${end.getDate()} ${format(start, 'MMM yyyy', { locale: es })}` }
+  } else {
+    const nm = month + 1
+    const ny = nm > 11 ? year + 1 : year
+    const am = nm > 11 ? 0 : nm
+    const start = new Date(ny, am, 1)
+    const end = new Date(ny, am, 15)
+    return { start, end, label: `1–15 ${format(start, 'MMM yyyy', { locale: es })}` }
+  }
+}
+
 export function intervalLabel(interval: IntervalType): string {
   const labels: Record<IntervalType, string> = {
     quincenal: 'Quincenal',

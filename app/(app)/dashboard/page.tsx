@@ -1,10 +1,10 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
-import { formatMXDate, isOverdue, getCurrentPeriodDates } from '@/lib/utils/date-utils'
+import { formatMXDate, isOverdue, getCurrentPeriodDates, getNextPeriodDates } from '@/lib/utils/date-utils'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import type { PeriodSummary, InstallmentPlan, InterPersonDebt, IncomeConfig } from '@/types/database'
+import type { PeriodSummary, InstallmentPlan, InterPersonDebt, IncomeConfig, ScheduledPayment } from '@/types/database'
 import AddPeriodPaymentForm from '@/components/dashboard/add-period-payment-form'
 import PeriodPaymentsList from '@/components/dashboard/period-payments-list'
 import AddIncomeForm from '@/components/dashboard/add-income-form'
@@ -90,6 +90,17 @@ export default async function DashboardPage() {
     .select('*, debtor:profiles!debtor_id(display_name, full_name)')
     .eq('creditor_id', userId)
     .eq('is_paid', false)
+
+  // Próxima quincena — pagos programados
+  const { end: nextEnd, label: nextLabel } = getNextPeriodDates()
+  const nextPeriodStr = format(nextEnd, 'yyyy-MM-dd')
+  const { data: nextPayments } = await supabase
+    .from('scheduled_payments')
+    .select('*, cards(name)')
+    .eq('owner_id', userId)
+    .eq('period_date', nextPeriodStr)
+    .eq('is_paid', false)
+    .order('payment_type', { ascending: true }) as { data: ScheduledPayment[] | null }
 
   // Ingreso actual
   const { data: currentIncome } = await supabase
@@ -206,6 +217,32 @@ export default async function DashboardPage() {
               <span className="font-medium text-green-700 shrink-0">{formatMXN(d.amount)}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Próxima quincena — pagos programados */}
+      {(nextPayments?.length ?? 0) > 0 && (
+        <div className="card p-4 space-y-2">
+          <h2 className="font-semibold text-gray-700 text-sm">
+            Próxima quincena · <span className="font-normal text-gray-400">{nextLabel}</span>
+          </h2>
+          <div className="space-y-1">
+            {nextPayments!.map(p => (
+              <div key={p.id} className="flex justify-between text-sm py-1.5 border-b last:border-0">
+                <div className="min-w-0 flex-1 mr-2">
+                  <span className="text-gray-700 truncate block">{p.concept}</span>
+                  {(p as any).cards?.name && (
+                    <span className="text-xs text-gray-400">{(p as any).cards.name}</span>
+                  )}
+                </div>
+                <span className="font-medium text-gray-800 shrink-0">{formatMXN(p.amount)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="pt-1 border-t flex justify-between text-sm font-semibold text-gray-700">
+            <span>Total</span>
+            <span>{formatMXN(nextPayments!.reduce((s, p) => s + p.amount, 0))}</span>
+          </div>
         </div>
       )}
     </div>

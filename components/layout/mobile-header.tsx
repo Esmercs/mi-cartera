@@ -11,6 +11,7 @@ const titles: Record<string, string> = {
   '/gastos-fijos':   'Gastos Fijos',
   '/financiamiento': 'Financiamiento',
   '/diversion':      'Diversión',
+  '/deudas':         'Deudas',
   '/admin/requests': 'Admin',
 }
 

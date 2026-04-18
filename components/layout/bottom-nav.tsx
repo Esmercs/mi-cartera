@@ -3,18 +3,18 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
-  Users,
   CalendarDays,
   CreditCard,
   PartyPopper,
+  Wallet,
 } from 'lucide-react'
 
 const navItems = [
-  { href: '/dashboard',      label: 'Inicio',        icon: LayoutDashboard },
-  { href: '/shared',         label: 'Compartido',    icon: Users },
-  { href: '/gastos-fijos',   label: 'Fijos',         icon: CalendarDays },
-  { href: '/financiamiento', label: 'MSI',           icon: CreditCard },
-  { href: '/diversion',      label: 'Diversión',     icon: PartyPopper },
+  { href: '/dashboard',      label: 'Inicio',    icon: LayoutDashboard },
+  { href: '/gastos-fijos',   label: 'Fijos',     icon: CalendarDays },
+  { href: '/financiamiento', label: 'MSI',       icon: CreditCard },
+  { href: '/diversion',      label: 'Diversión', icon: PartyPopper },
+  { href: '/deudas',         label: 'Deudas',    icon: Wallet },
 ]
 
 export default function BottomNav() {

@@ -9,6 +9,7 @@ import {
   PartyPopper,
   ShieldCheck,
   LogOut,
+  Wallet,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -27,6 +28,7 @@ const navItems: NavItem[] = [
   { href: '/gastos-fijos', label: 'Gastos Fijos',       icon: <CalendarDays size={18} /> },
   { href: '/financiamiento', label: 'Financiamiento',   icon: <CreditCard size={18} /> },
   { href: '/diversion',    label: 'Diversión',          icon: <PartyPopper size={18} /> },
+  { href: '/deudas',       label: 'Deudas',             icon: <Wallet size={18} /> },
   { href: '/admin/requests', label: 'Admin',            icon: <ShieldCheck size={18} />, adminOnly: true },
 ]
 

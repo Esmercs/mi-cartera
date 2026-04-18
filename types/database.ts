@@ -155,6 +155,22 @@ export interface FunBudgetSummary {
   spent_pct: number
 }
 
+export interface ScheduledPayment {
+  id: string
+  owner_id: string
+  concept: string
+  amount: number
+  card_id: string | null
+  payment_type: PaymentType
+  period_date: string
+  is_paid: boolean
+  paid_at: string | null
+  notes: string | null
+  created_at: string
+  // joined
+  cards?: { name: string } | null
+}
+
 export interface InterPersonDebt {
   id: string
   debtor_id: string
