@@ -17,16 +17,19 @@ export default function UpdateCardBalanceForm({ cardId, cardName, currentBalance
   const [open, setOpen] = useState(false)
   const [balance, setBalance] = useState(currentBalance.toString())
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    await supabase
+    setError(null)
+    const { error: err } = await supabase
       .from('cards')
       .update({ current_balance: parseFloat(balance) })
       .eq('id', cardId)
-    setOpen(false)
     setLoading(false)
+    if (err) { setError(err.message); return }
+    setOpen(false)
     router.refresh()
   }
 
@@ -57,6 +60,7 @@ export default function UpdateCardBalanceForm({ cardId, cardName, currentBalance
                   required
                 />
               </div>
+              {error && <p className="text-xs text-red-500">{error}</p>}
               <div className="flex gap-2 pt-1">
                 <button type="submit" disabled={loading} className="btn-primary flex-1">
                   {loading ? 'Guardando...' : 'Guardar'}

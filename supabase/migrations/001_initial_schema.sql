@@ -70,18 +70,6 @@ CREATE TABLE IF NOT EXISTS cards (
   created_at       TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Datos iniciales: tarjetas de tu Excel
-INSERT INTO cards (ownership, name, card_type) VALUES
-  ('lalo',   'BBVA',          'credit'),
-  ('lalo',   'Liverpool',     'credit'),
-  ('lalo',   'Banamex',       'credit'),
-  ('lalo',   'Visa Cart',     'credit'),
-  ('lalo',   'Rappy Cart',    'credit'),
-  ('lalo',   'Banamex Oro',   'credit'),
-  ('lalo',   'Bradescart',    'credit'),
-  ('ale',    'Ojitos Bank',   'credit'),
-  ('shared', 'Efectivo',      'cash'),
-  ('shared', 'Gris Cash',     'cash');
 
 -- ============================================================
 -- RECURRING EXPENSES (Gastos Mensuales fijos y recurrentes)

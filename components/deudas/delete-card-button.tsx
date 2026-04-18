@@ -12,8 +12,9 @@ export default function DeleteCardButton({ id, name }: { id: string; name: strin
   async function handleDelete() {
     if (!confirm(`¿Ocultar la tarjeta "${name}"? Los registros existentes no se eliminarán.`)) return
     setLoading(true)
-    await supabase.from('cards').update({ is_active: false }).eq('id', id)
+    const { error } = await supabase.from('cards').update({ is_active: false }).eq('id', id)
     setLoading(false)
+    if (error) { alert(`Error: ${error.message}`); return }
     router.refresh()
   }
 
