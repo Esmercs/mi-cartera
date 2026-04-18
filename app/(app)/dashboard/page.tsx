@@ -4,7 +4,7 @@ import { formatMXN } from '@/lib/utils/currency'
 import { formatMXDate, isOverdue, getCurrentPeriodDates, getNextPeriodDates } from '@/lib/utils/date-utils'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import type { PeriodSummary, InstallmentPlan, InterPersonDebt, IncomeConfig, ScheduledPayment } from '@/types/database'
+import type { PeriodSummary, InstallmentPlan, InterPersonDebt, IncomeConfig, ScheduledPayment, RecurringExpenseSplit } from '@/types/database'
 import AddPeriodPaymentForm from '@/components/dashboard/add-period-payment-form'
 import PeriodPaymentsList from '@/components/dashboard/period-payments-list'
 import AddIncomeForm from '@/components/dashboard/add-income-form'
@@ -91,16 +91,65 @@ export default async function DashboardPage() {
     .eq('creditor_id', userId)
     .eq('is_paid', false)
 
-  // Próxima quincena — pagos programados
-  const { end: nextEnd, label: nextLabel } = getNextPeriodDates()
-  const nextPeriodStr = format(nextEnd, 'yyyy-MM-dd')
-  const { data: nextPayments } = await supabase
+  // Próxima quincena — todas las fuentes
+  const { start: nextStart, end: nextEnd, label: nextLabel } = getNextPeriodDates()
+  const nextPeriodStr  = format(nextEnd, 'yyyy-MM-dd')
+  const nextStartStr   = format(nextStart, 'yyyy-MM-dd')
+
+  const { data: profile } = await supabase
+    .from('profiles').select('display_name').eq('id', userId).single()
+  const isLalo     = profile?.display_name?.toLowerCase() === 'lalo'
+  const myOwnership = isLalo ? 'lalo' : 'ale'
+
+  // 1. Pagos programados del usuario
+  const { data: nextScheduled } = await supabase
     .from('scheduled_payments')
     .select('*, cards(name)')
     .eq('owner_id', userId)
     .eq('period_date', nextPeriodStr)
     .eq('is_paid', false)
     .order('payment_type', { ascending: true }) as { data: ScheduledPayment[] | null }
+
+  // 2. Gastos fijos (personales + compartidos) con next_payment_date en la próxima quincena
+  const { data: nextFijos } = await supabase
+    .from('recurring_expenses_split')
+    .select('*')
+    .eq('is_active', true)
+    .in('ownership', [myOwnership, 'shared'])
+    .gte('next_payment_date', nextStartStr)
+    .lte('next_payment_date', nextPeriodStr) as { data: RecurringExpenseSplit[] | null }
+
+  // 3. MSIs con next_payment_date en la próxima quincena
+  const { data: nextMSI } = await supabase
+    .from('installment_plans')
+    .select('*, cards(name)')
+    .eq('owner_id', userId)
+    .eq('is_active', true)
+    .gte('next_payment_date', nextStartStr)
+    .lte('next_payment_date', nextPeriodStr) as { data: InstallmentPlan[] | null }
+
+  // Unificar en una lista ordenada por monto descendente
+  type NextItem = { key: string; concept: string; amount: number; card: string | null; type: 'fijo' | 'msi' | 'programado' }
+  const nextItems: NextItem[] = [
+    ...(nextScheduled ?? []).map(p => ({
+      key: p.id, concept: p.concept,
+      amount: p.amount,
+      card: (p as any).cards?.name ?? null,
+      type: 'programado' as const,
+    })),
+    ...(nextFijos ?? []).map(e => ({
+      key: e.id, concept: e.concept,
+      amount: e.ownership === 'shared' ? (isLalo ? e.lalo_amount : e.ale_amount) : e.total_amount,
+      card: null,
+      type: 'fijo' as const,
+    })),
+    ...(nextMSI ?? []).map(p => ({
+      key: p.id, concept: p.concept,
+      amount: p.monthly_amount,
+      card: (p as any).cards?.name ?? null,
+      type: 'msi' as const,
+    })),
+  ].sort((a, b) => b.amount - a.amount)
 
   // Ingreso actual
   const { data: currentIncome } = await supabase
@@ -220,31 +269,48 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Próxima quincena — pagos programados */}
-      {(nextPayments?.length ?? 0) > 0 && (
-        <div className="card p-4 space-y-2">
-          <h2 className="font-semibold text-gray-700 text-sm">
-            Próxima quincena · <span className="font-normal text-gray-400">{nextLabel}</span>
-          </h2>
-          <div className="space-y-1">
-            {nextPayments!.map(p => (
-              <div key={p.id} className="flex justify-between text-sm py-1.5 border-b last:border-0">
-                <div className="min-w-0 flex-1 mr-2">
-                  <span className="text-gray-700 truncate block">{p.concept}</span>
-                  {(p as any).cards?.name && (
-                    <span className="text-xs text-gray-400">{(p as any).cards.name}</span>
-                  )}
+      {/* Próxima quincena — lista unificada */}
+      <div className="card p-4 space-y-2">
+        <h2 className="font-semibold text-gray-700 text-sm flex items-center gap-2">
+          Próxima quincena
+          <span className="font-normal text-gray-400 text-xs">{nextLabel}</span>
+          {nextItems.length > 0 && (
+            <span className="ml-auto text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+              {nextItems.length}
+            </span>
+          )}
+        </h2>
+        {nextItems.length === 0 ? (
+          <p className="text-sm text-gray-400">Sin pagos programados para la próxima quincena.</p>
+        ) : (
+          <>
+            <div className="space-y-0.5">
+              {nextItems.map(item => (
+                <div key={item.key} className="flex items-center justify-between py-2 border-b last:border-0 gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-gray-800 truncate">{item.concept}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                        item.type === 'fijo'       ? 'bg-blue-50 text-blue-600' :
+                        item.type === 'msi'        ? 'bg-purple-50 text-purple-600' :
+                        'bg-orange-50 text-orange-600'
+                      }`}>
+                        {item.type === 'fijo' ? 'Fijo' : item.type === 'msi' ? 'MSI' : 'Programado'}
+                      </span>
+                      {item.card && <span className="text-xs text-gray-400 truncate">{item.card}</span>}
+                    </div>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-800 shrink-0">{formatMXN(item.amount)}</span>
                 </div>
-                <span className="font-medium text-gray-800 shrink-0">{formatMXN(p.amount)}</span>
-              </div>
-            ))}
-          </div>
-          <div className="pt-1 border-t flex justify-between text-sm font-semibold text-gray-700">
-            <span>Total</span>
-            <span>{formatMXN(nextPayments!.reduce((s, p) => s + p.amount, 0))}</span>
-          </div>
-        </div>
-      )}
+              ))}
+            </div>
+            <div className="pt-1 border-t flex justify-between text-sm font-bold text-gray-700">
+              <span>Total estimado</span>
+              <span>{formatMXN(nextItems.reduce((s, i) => s + i.amount, 0))}</span>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
