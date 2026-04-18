@@ -10,6 +10,7 @@ import PeriodPaymentsList from '@/components/dashboard/period-payments-list'
 import AddIncomeForm from '@/components/dashboard/add-income-form'
 import RegisterNextPaymentButton from '@/components/dashboard/register-next-payment-button'
 import PayCardGroupButton from '@/components/dashboard/pay-card-group-button'
+import MarkDebtPaidButton from '@/components/shared/mark-debt-paid-button'
 
 export default async function DashboardPage() {
   const supabase = createServerClient()
@@ -145,6 +146,7 @@ export default async function DashboardPage() {
     type: 'fijo' | 'msi' | 'programado' | 'deuda'
     cardId: string | null; planId: string | null; scheduledId: string | null
     debtId: string | null; creditorName: string | null
+    totalInstallments: number | null; paidInstallments: number
   }
   const nextItems: NextItem[] = [
     ...(nextScheduled ?? []).map(p => ({
@@ -153,6 +155,7 @@ export default async function DashboardPage() {
       type: 'programado' as const,
       cardId: p.card_id ?? null, planId: null, scheduledId: p.id,
       debtId: null, creditorName: null,
+      totalInstallments: null, paidInstallments: 0,
     })),
     ...(nextFijos ?? []).map(e => ({
       key: e.id, concept: e.concept,
@@ -160,6 +163,7 @@ export default async function DashboardPage() {
       card: null, type: 'fijo' as const,
       cardId: null, planId: null, scheduledId: null,
       debtId: null, creditorName: null,
+      totalInstallments: null, paidInstallments: 0,
     })),
     ...(nextMSI ?? []).map(p => ({
       key: p.id, concept: p.concept, amount: p.monthly_amount,
@@ -167,13 +171,15 @@ export default async function DashboardPage() {
       type: 'msi' as const,
       cardId: p.card_id ?? null, planId: p.id, scheduledId: null,
       debtId: null, creditorName: null,
+      totalInstallments: null, paidInstallments: 0,
     })),
     ...(nextDebts ?? []).map(d => ({
-      key: d.id, concept: d.concept,
-      amount: d.total_installments ? d.amount : d.amount,
+      key: d.id, concept: d.concept, amount: d.amount,
       card: null, type: 'deuda' as const,
       cardId: null, planId: null, scheduledId: null,
       debtId: d.id, creditorName: d.creditor?.display_name ?? null,
+      totalInstallments: d.total_installments ?? null,
+      paidInstallments: d.paid_installments ?? 0,
     })),
   ].sort((a, b) => b.amount - a.amount)
 
@@ -329,7 +335,14 @@ export default async function DashboardPage() {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-sm font-semibold text-gray-800">{formatMXN(item.amount)}</span>
-                      {item.type !== 'deuda' && (
+                      {item.type === 'deuda' && item.debtId ? (
+                        <MarkDebtPaidButton
+                          debtId={item.debtId}
+                          creditorId={''}
+                          totalInstallments={item.totalInstallments}
+                          paidInstallments={item.paidInstallments}
+                        />
+                      ) : (
                         <RegisterNextPaymentButton
                           periodId={period?.id ?? ''}
                           concept={item.concept}

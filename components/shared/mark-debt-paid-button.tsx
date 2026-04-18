@@ -5,12 +5,11 @@ import { createClient } from '@/lib/supabase/client'
 
 export default function MarkDebtPaidButton({
   debtId,
-  creditorId,
   totalInstallments,
   paidInstallments,
 }: {
   debtId: string
-  creditorId: string
+  creditorId?: string
   totalInstallments: number | null
   paidInstallments: number
 }) {
@@ -28,8 +27,6 @@ export default function MarkDebtPaidButton({
     if (!confirm(label)) return
 
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
 
     const newPaid = isInstallment ? paidInstallments + 1 : null
     const isDone  = !isInstallment || newPaid === totalInstallments
