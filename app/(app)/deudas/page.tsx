@@ -9,6 +9,8 @@ import AddScheduledPaymentForm from '@/components/deudas/add-scheduled-payment-f
 import PayScheduledButton from '@/components/deudas/pay-scheduled-button'
 import DeleteScheduledButton from '@/components/deudas/delete-scheduled-button'
 import UpdateCardBalanceForm from '@/components/deudas/update-card-balance-form'
+import AddCardForm from '@/components/deudas/add-card-form'
+import DeleteCardButton from '@/components/deudas/delete-card-button'
 
 export default async function DeudasPage() {
   const supabase = createServerClient()
@@ -73,7 +75,10 @@ export default async function DeudasPage() {
       <section className="card p-4 md:p-5 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-gray-800 text-sm">Deuda en tarjetas</h2>
-          <span className="text-sm font-bold text-red-600">{formatMXN(totalDebt)}</span>
+          <div className="flex items-center gap-3">
+            <AddCardForm />
+            <span className="text-sm font-bold text-red-600">{formatMXN(totalDebt)}</span>
+          </div>
         </div>
 
         {!cards?.length ? (
@@ -97,6 +102,7 @@ export default async function DeudasPage() {
                     cardName={card.name}
                     currentBalance={card.current_balance}
                   />
+                  <DeleteCardButton id={card.id} name={card.name} />
                 </div>
               </div>
             ))}
