@@ -2,7 +2,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
 import { formatMXDate, intervalLabel, isOverdue } from '@/lib/utils/date-utils'
-import type { RecurringExpenseSplit, SplitPercentage } from '@/types/database'
+import type { RecurringExpenseSplit } from '@/types/database'
 import AddExpenseForm from '@/components/gastos-fijos/add-expense-form'
 import DeleteExpenseButton from '@/components/gastos-fijos/delete-expense-button'
 
@@ -27,13 +27,12 @@ export default async function GastosFijosPage() {
     .eq('is_active', true)
     .order('next_payment_date', { ascending: true }) as { data: RecurringExpenseSplit[] | null }
 
-  // Split vigente
-  const { data: splits } = await supabase
-    .from('split_percentages')
-    .select('*') as { data: SplitPercentage[] | null }
+  // Split vigente via SECURITY DEFINER function (bypasses RLS)
+  const { data: splitRow } = await supabase.rpc('get_split_percentages').single() as
+    { data: { lalo_pct: number; ale_pct: number } | null }
 
-  const laloSplit = splits?.find(s => s.display_name?.toLowerCase() === 'lalo')
-  const aleSplit  = splits?.find(s => s.display_name?.toLowerCase() === 'ale')
+  const laloSplit = splitRow ? { percentage: splitRow.lalo_pct } : null
+  const aleSplit  = splitRow ? { percentage: splitRow.ale_pct  } : null
 
   const personal = allExpenses?.filter(e => e.ownership === myOwnership) ?? []
   const shared   = allExpenses?.filter(e => e.ownership === 'shared') ?? []

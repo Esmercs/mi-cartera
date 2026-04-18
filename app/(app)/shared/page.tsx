@@ -19,10 +19,11 @@ export default async function SharedPage() {
     .eq('is_active', true)
     .order('next_payment_date', { ascending: true }) as { data: RecurringExpenseSplit[] | null }
 
-  // Split percentages
-  const { data: splits } = await supabase.from('split_percentages').select('*')
-  const laloSplit = splits?.find((s: any) => s.display_name?.toLowerCase() === 'lalo')
-  const aleSplit  = splits?.find((s: any) => s.display_name?.toLowerCase() === 'ale')
+  // Split percentages via SECURITY DEFINER function (bypasses RLS)
+  const { data: splitRow } = await supabase.rpc('get_split_percentages').single() as
+    { data: { lalo_pct: number; ale_pct: number } | null }
+  const laloSplit = splitRow ? { percentage: splitRow.lalo_pct } : null
+  const aleSplit  = splitRow ? { percentage: splitRow.ale_pct  } : null
 
   // Diversión actual
   const { data: funSummary } = await supabase
