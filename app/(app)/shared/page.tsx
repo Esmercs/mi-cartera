@@ -213,6 +213,7 @@ export default async function SharedPage() {
                     creditorId={debt.creditor_id}
                     totalInstallments={debt.total_installments ?? null}
                     paidInstallments={debt.paid_installments ?? 0}
+                    dueDate={debt.due_date ?? null}
                   />
                 </div>
               </div>

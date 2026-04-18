@@ -146,7 +146,7 @@ export default async function DashboardPage() {
     type: 'fijo' | 'msi' | 'programado' | 'deuda'
     cardId: string | null; planId: string | null; scheduledId: string | null
     debtId: string | null; creditorName: string | null
-    totalInstallments: number | null; paidInstallments: number
+    totalInstallments: number | null; paidInstallments: number; dueDate: string | null
   }
   const nextItems: NextItem[] = [
     ...(nextScheduled ?? []).map(p => ({
@@ -155,7 +155,7 @@ export default async function DashboardPage() {
       type: 'programado' as const,
       cardId: p.card_id ?? null, planId: null, scheduledId: p.id,
       debtId: null, creditorName: null,
-      totalInstallments: null, paidInstallments: 0,
+      totalInstallments: null, paidInstallments: 0, dueDate: null,
     })),
     ...(nextFijos ?? []).map(e => ({
       key: e.id, concept: e.concept,
@@ -163,7 +163,7 @@ export default async function DashboardPage() {
       card: null, type: 'fijo' as const,
       cardId: null, planId: null, scheduledId: null,
       debtId: null, creditorName: null,
-      totalInstallments: null, paidInstallments: 0,
+      totalInstallments: null, paidInstallments: 0, dueDate: null,
     })),
     ...(nextMSI ?? []).map(p => ({
       key: p.id, concept: p.concept, amount: p.monthly_amount,
@@ -171,7 +171,7 @@ export default async function DashboardPage() {
       type: 'msi' as const,
       cardId: p.card_id ?? null, planId: p.id, scheduledId: null,
       debtId: null, creditorName: null,
-      totalInstallments: null, paidInstallments: 0,
+      totalInstallments: null, paidInstallments: 0, dueDate: null,
     })),
     ...(nextDebts ?? []).map(d => ({
       key: d.id, concept: d.concept, amount: d.amount,
@@ -180,6 +180,7 @@ export default async function DashboardPage() {
       debtId: d.id, creditorName: d.creditor?.display_name ?? null,
       totalInstallments: d.total_installments ?? null,
       paidInstallments: d.paid_installments ?? 0,
+      dueDate: d.due_date ?? null,
     })),
   ].sort((a, b) => b.amount - a.amount)
 
@@ -338,9 +339,9 @@ export default async function DashboardPage() {
                       {item.type === 'deuda' && item.debtId ? (
                         <MarkDebtPaidButton
                           debtId={item.debtId}
-                          creditorId={''}
                           totalInstallments={item.totalInstallments}
                           paidInstallments={item.paidInstallments}
+                          dueDate={item.dueDate}
                         />
                       ) : (
                         <RegisterNextPaymentButton

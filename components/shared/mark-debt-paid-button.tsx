@@ -3,15 +3,23 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
+function addOneMonth(dateStr: string): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setMonth(d.getMonth() + 1)
+  return d.toISOString().split('T')[0]
+}
+
 export default function MarkDebtPaidButton({
   debtId,
   totalInstallments,
   paidInstallments,
+  dueDate,
 }: {
   debtId: string
   creditorId?: string
   totalInstallments: number | null
   paidInstallments: number
+  dueDate?: string | null
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -31,14 +39,18 @@ export default function MarkDebtPaidButton({
     const newPaid = isInstallment ? paidInstallments + 1 : null
     const isDone  = !isInstallment || newPaid === totalInstallments
 
-    await supabase
-      .from('inter_person_debts')
-      .update({
-        paid_installments: newPaid ?? paidInstallments,
-        is_paid:  isDone,
-        paid_at:  isDone ? new Date().toISOString().split('T')[0] : null,
-      })
-      .eq('id', debtId)
+    const update: Record<string, unknown> = {
+      paid_installments: newPaid ?? paidInstallments,
+      is_paid: isDone,
+      paid_at: isDone ? new Date().toISOString().split('T')[0] : null,
+    }
+
+    // Avanzar due_date al siguiente mes si quedan cuotas
+    if (isInstallment && !isDone && dueDate) {
+      update.due_date = addOneMonth(dueDate)
+    }
+
+    await supabase.from('inter_person_debts').update(update).eq('id', debtId)
 
     setLoading(false)
     router.refresh()
