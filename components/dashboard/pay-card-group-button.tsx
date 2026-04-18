@@ -9,7 +9,7 @@ interface Item {
   concept: string
   amount: number
   cardId: string | null
-  type: 'fijo' | 'msi' | 'programado'
+  type: 'fijo' | 'msi' | 'programado' | 'deuda'
   planId: string | null
   scheduledId: string | null
 }

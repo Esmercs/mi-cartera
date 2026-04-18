@@ -85,13 +85,13 @@ export default async function DashboardPage() {
     .from('inter_person_debts')
     .select('*, creditor:profiles!creditor_id(display_name, full_name)')
     .eq('debtor_id', userId)
-    .eq('is_paid', false)
+    .eq('is_paid', false) as { data: InterPersonDebt[] | null }
 
   const { data: debtsToCollect } = await supabase
     .from('inter_person_debts')
     .select('*, debtor:profiles!debtor_id(display_name, full_name)')
     .eq('creditor_id', userId)
-    .eq('is_paid', false)
+    .eq('is_paid', false) as { data: InterPersonDebt[] | null }
 
   // Próxima quincena — todas las fuentes
   const { start: nextStart, end: nextEnd, label: nextLabel } = getNextPeriodDates()
@@ -130,11 +130,21 @@ export default async function DashboardPage() {
     .gte('next_payment_date', nextStartStr)
     .lte('next_payment_date', nextPeriodStr) as { data: InstallmentPlan[] | null }
 
+  // 4. Deudas personales con vencimiento en la próxima quincena
+  const { data: nextDebts } = await supabase
+    .from('inter_person_debts')
+    .select('*, creditor:profiles!creditor_id(display_name)')
+    .eq('debtor_id', userId)
+    .eq('is_paid', false)
+    .gte('due_date', nextStartStr)
+    .lte('due_date', nextPeriodStr) as { data: any[] | null }
+
   // Unificar en una lista ordenada por monto descendente
   type NextItem = {
     key: string; concept: string; amount: number; card: string | null
-    type: 'fijo' | 'msi' | 'programado'
+    type: 'fijo' | 'msi' | 'programado' | 'deuda'
     cardId: string | null; planId: string | null; scheduledId: string | null
+    debtId: string | null; creditorName: string | null
   }
   const nextItems: NextItem[] = [
     ...(nextScheduled ?? []).map(p => ({
@@ -142,18 +152,28 @@ export default async function DashboardPage() {
       card: (p as any).cards?.name ?? null,
       type: 'programado' as const,
       cardId: p.card_id ?? null, planId: null, scheduledId: p.id,
+      debtId: null, creditorName: null,
     })),
     ...(nextFijos ?? []).map(e => ({
       key: e.id, concept: e.concept,
       amount: e.ownership === 'shared' ? (isLalo ? e.lalo_amount : e.ale_amount) : e.total_amount,
       card: null, type: 'fijo' as const,
       cardId: null, planId: null, scheduledId: null,
+      debtId: null, creditorName: null,
     })),
     ...(nextMSI ?? []).map(p => ({
       key: p.id, concept: p.concept, amount: p.monthly_amount,
       card: (p as any).cards?.name ?? null,
       type: 'msi' as const,
       cardId: p.card_id ?? null, planId: p.id, scheduledId: null,
+      debtId: null, creditorName: null,
+    })),
+    ...(nextDebts ?? []).map(d => ({
+      key: d.id, concept: d.concept,
+      amount: d.total_installments ? d.amount : d.amount,
+      card: null, type: 'deuda' as const,
+      cardId: null, planId: null, scheduledId: null,
+      debtId: d.id, creditorName: d.creditor?.display_name ?? null,
     })),
   ].sort((a, b) => b.amount - a.amount)
 
@@ -183,8 +203,10 @@ export default async function DashboardPage() {
     .single() as { data: IncomeConfig | null }
 
   const totalMSI = (installments ?? []).reduce((sum, p) => sum + p.monthly_amount, 0)
-  const totalOwed = (debtsOwed ?? []).reduce((sum, d) => sum + d.amount, 0)
-  const totalToCollect = (debtsToCollect ?? []).reduce((sum, d) => sum + d.amount, 0)
+  const debtPending = (d: InterPersonDebt) =>
+    d.total_installments ? d.amount * (d.total_installments - d.paid_installments) : d.amount
+  const totalOwed       = (debtsOwed      ?? []).reduce((sum, d) => sum + debtPending(d), 0)
+  const totalToCollect  = (debtsToCollect ?? []).reduce((sum, d) => sum + debtPending(d), 0)
 
   return (
     <div className="space-y-4 max-w-2xl mx-auto">
@@ -293,25 +315,31 @@ export default async function DashboardPage() {
                   <div key={item.key} className="flex items-center justify-between py-2 border-b last:border-0 gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-gray-800 truncate">{item.concept}</p>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                        item.type === 'fijo' ? 'bg-blue-50 text-blue-600' :
-                        item.type === 'msi'  ? 'bg-purple-50 text-purple-600' :
-                        'bg-orange-50 text-orange-600'
-                      }`}>
-                        {item.type === 'fijo' ? 'Fijo' : item.type === 'msi' ? 'MSI' : 'Programado'}
-                      </span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                          item.type === 'fijo'  ? 'bg-blue-50 text-blue-600' :
+                          item.type === 'msi'   ? 'bg-purple-50 text-purple-600' :
+                          item.type === 'deuda' ? 'bg-red-50 text-red-600' :
+                          'bg-orange-50 text-orange-600'
+                        }`}>
+                          {item.type === 'fijo' ? 'Fijo' : item.type === 'msi' ? 'MSI' :
+                           item.type === 'deuda' ? `→ ${item.creditorName ?? 'deuda'}` : 'Programado'}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-sm font-semibold text-gray-800">{formatMXN(item.amount)}</span>
-                      <RegisterNextPaymentButton
-                        periodId={period?.id ?? ''}
-                        concept={item.concept}
-                        amount={item.amount}
-                        cardId={item.cardId}
-                        type={item.type}
-                        planId={item.planId}
-                        scheduledId={item.scheduledId}
-                      />
+                      {item.type !== 'deuda' && (
+                        <RegisterNextPaymentButton
+                          periodId={period?.id ?? ''}
+                          concept={item.concept}
+                          amount={item.amount}
+                          cardId={item.cardId}
+                          type={item.type as 'fijo' | 'msi' | 'programado'}
+                          planId={item.planId}
+                          scheduledId={item.scheduledId}
+                        />
+                      )}
                     </div>
                   </div>
                 ))}
@@ -365,9 +393,20 @@ export default async function DashboardPage() {
         <div className="card p-4 space-y-2">
           <h2 className="font-semibold text-red-600 text-sm">Lo que debo · {formatMXN(totalOwed)}</h2>
           {debtsOwed!.map(d => (
-            <div key={d.id} className="flex justify-between text-sm py-1 border-b last:border-0">
-              <span className="text-gray-700 truncate mr-2">{d.concept}</span>
-              <span className="font-medium text-red-600 shrink-0">{formatMXN(d.amount)}</span>
+            <div key={d.id} className="flex justify-between items-start py-1.5 border-b last:border-0 gap-2">
+              <div className="min-w-0">
+                <p className="text-sm text-gray-700 truncate">{d.concept}</p>
+                {d.total_installments && (
+                  <p className="text-xs text-purple-500">
+                    {d.paid_installments}/{d.total_installments} cuotas · {formatMXN(d.amount)}/mes
+                  </p>
+                )}
+              </div>
+              <span className="font-medium text-red-600 shrink-0 text-sm">
+                {d.total_installments
+                  ? formatMXN(d.amount * (d.total_installments - d.paid_installments))
+                  : formatMXN(d.amount)}
+              </span>
             </div>
           ))}
         </div>
@@ -377,9 +416,20 @@ export default async function DashboardPage() {
         <div className="card p-4 space-y-2">
           <h2 className="font-semibold text-green-700 text-sm">Me deben · {formatMXN(totalToCollect)}</h2>
           {debtsToCollect!.map(d => (
-            <div key={d.id} className="flex justify-between text-sm py-1 border-b last:border-0">
-              <span className="text-gray-700 truncate mr-2">{d.concept}</span>
-              <span className="font-medium text-green-700 shrink-0">{formatMXN(d.amount)}</span>
+            <div key={d.id} className="flex justify-between items-start py-1.5 border-b last:border-0 gap-2">
+              <div className="min-w-0">
+                <p className="text-sm text-gray-700 truncate">{d.concept}</p>
+                {d.total_installments && (
+                  <p className="text-xs text-purple-500">
+                    {d.paid_installments}/{d.total_installments} cuotas · {formatMXN(d.amount)}/mes
+                  </p>
+                )}
+              </div>
+              <span className="font-medium text-green-700 shrink-0 text-sm">
+                {d.total_installments
+                  ? formatMXN(d.amount * (d.total_installments - d.paid_installments))
+                  : formatMXN(d.amount)}
+              </span>
             </div>
           ))}
         </div>

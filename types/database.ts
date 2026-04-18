@@ -182,6 +182,8 @@ export interface InterPersonDebt {
   due_date: string | null
   paid_at: string | null
   notes: string | null
+  total_installments: number | null
+  paid_installments: number
   created_at: string
   // joined
   debtor?: Profile

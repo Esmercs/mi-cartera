@@ -190,6 +190,12 @@ export default async function SharedPage() {
                     {' '}le debe a{' '}
                     <span className="font-medium">{debt.creditor?.display_name}</span>
                   </p>
+                  {debt.total_installments && (
+                    <p className="text-xs text-purple-600 mt-0.5">
+                      {debt.paid_installments}/{debt.total_installments} cuotas ·{' '}
+                      {formatMXN(debt.amount)}/mes
+                    </p>
+                  )}
                   {debt.due_date && (
                     <p className={`text-xs mt-0.5 ${isOverdue(debt.due_date) ? 'text-red-500' : 'text-gray-400'}`}>
                       Vence: {formatMXDate(debt.due_date)}
@@ -197,8 +203,17 @@ export default async function SharedPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="font-semibold text-gray-800">{formatMXN(debt.amount)}</span>
-                  <MarkDebtPaidButton debtId={debt.id} creditorId={debt.creditor_id} />
+                  <span className="font-semibold text-gray-800">
+                    {debt.total_installments
+                      ? formatMXN(debt.amount * (debt.total_installments - debt.paid_installments))
+                      : formatMXN(debt.amount)}
+                  </span>
+                  <MarkDebtPaidButton
+                    debtId={debt.id}
+                    creditorId={debt.creditor_id}
+                    totalInstallments={debt.total_installments ?? null}
+                    paidInstallments={debt.paid_installments ?? 0}
+                  />
                 </div>
               </div>
             ))}

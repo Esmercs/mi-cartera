@@ -9,10 +9,12 @@ export default function AddInterPersonDebtForm() {
   const supabase = createClient()
   const [open, setOpen] = useState(false)
   const [users, setUsers] = useState<{ id: string; display_name: string }[]>([])
+  const [isMeses, setIsMeses] = useState(false)
   const [form, setForm] = useState({
     debtor_id: '',
     concept: '',
     amount: '',
+    installments: '',
     due_date: '',
   })
   const [loading, setLoading] = useState(false)
@@ -23,6 +25,8 @@ export default function AddInterPersonDebtForm() {
       .select('id, display_name')
       .eq('status', 'approved')
     setUsers(data ?? [])
+    setIsMeses(false)
+    setForm({ debtor_id: '', concept: '', amount: '', installments: '', due_date: '' })
     setOpen(true)
   }
 
@@ -31,19 +35,26 @@ export default function AddInterPersonDebtForm() {
     setLoading(true)
 
     const { data: { user } } = await supabase.auth.getUser()
+    const totalInstallments = isMeses ? parseInt(form.installments) : null
 
     await supabase.from('inter_person_debts').insert({
-      creditor_id: user!.id,
-      debtor_id:   form.debtor_id,
-      concept:     form.concept,
-      amount:      parseFloat(form.amount),
-      due_date:    form.due_date || null,
+      creditor_id:        user!.id,
+      debtor_id:          form.debtor_id,
+      concept:            form.concept,
+      amount:             parseFloat(form.amount),
+      total_installments: totalInstallments,
+      paid_installments:  0,
+      due_date:           form.due_date || null,
     })
 
     setOpen(false)
     setLoading(false)
     router.refresh()
   }
+
+  const totalAmount = isMeses && form.amount && form.installments
+    ? parseFloat(form.amount) * parseInt(form.installments)
+    : null
 
   return (
     <>
@@ -73,14 +84,53 @@ export default function AddInterPersonDebtForm() {
                   onChange={e => setForm(p => ({ ...p, concept: e.target.value }))}
                   placeholder="Descripción de la deuda" required />
               </div>
+
+              {/* Toggle a meses */}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isMeses}
+                  onChange={e => setIsMeses(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-sm text-gray-700">¿A meses?</span>
+              </label>
+
+              {isMeses ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="label">Monto por mes</label>
+                    <input className="input" type="number" step="0.01" min="0"
+                      value={form.amount} placeholder="200"
+                      onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} required />
+                  </div>
+                  <div>
+                    <label className="label">Número de meses</label>
+                    <input className="input" type="number" min="2" max="60"
+                      value={form.installments} placeholder="3"
+                      onChange={e => setForm(p => ({ ...p, installments: e.target.value }))} required />
+                  </div>
+                  {totalAmount !== null && (
+                    <p className="col-span-2 text-xs text-gray-500">
+                      Total: <span className="font-semibold text-gray-800">
+                        ${totalAmount.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <label className="label">Cantidad</label>
+                  <input className="input" type="number" step="0.01" min="0"
+                    value={form.amount}
+                    onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} required />
+                </div>
+              )}
+
               <div>
-                <label className="label">Cantidad</label>
-                <input className="input" type="number" step="0.01" min="0"
-                  value={form.amount}
-                  onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} required />
-              </div>
-              <div>
-                <label className="label">Fecha límite (opcional)</label>
+                <label className="label">
+                  {isMeses ? 'Fecha primer vencimiento (opcional)' : 'Fecha límite (opcional)'}
+                </label>
                 <input className="input" type="date" value={form.due_date}
                   onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))} />
               </div>
