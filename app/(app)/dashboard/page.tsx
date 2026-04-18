@@ -210,6 +210,49 @@ export default async function DashboardPage() {
         <PeriodPaymentsList payments={payments ?? []} />
       </div>
 
+      {/* Próxima quincena — lista unificada */}
+      <div className="card p-4 space-y-2">
+        <h2 className="font-semibold text-gray-700 text-sm flex items-center gap-2">
+          Próxima quincena
+          <span className="font-normal text-gray-400 text-xs">{nextLabel}</span>
+          {nextItems.length > 0 && (
+            <span className="ml-auto text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+              {nextItems.length}
+            </span>
+          )}
+        </h2>
+        {nextItems.length === 0 ? (
+          <p className="text-sm text-gray-400">Sin pagos programados para la próxima quincena.</p>
+        ) : (
+          <>
+            <div className="space-y-0.5">
+              {nextItems.map(item => (
+                <div key={item.key} className="flex items-center justify-between py-2 border-b last:border-0 gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-gray-800 truncate">{item.concept}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                        item.type === 'fijo'  ? 'bg-blue-50 text-blue-600' :
+                        item.type === 'msi'   ? 'bg-purple-50 text-purple-600' :
+                        'bg-orange-50 text-orange-600'
+                      }`}>
+                        {item.type === 'fijo' ? 'Fijo' : item.type === 'msi' ? 'MSI' : 'Programado'}
+                      </span>
+                      {item.card && <span className="text-xs text-gray-400 truncate">{item.card}</span>}
+                    </div>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-800 shrink-0">{formatMXN(item.amount)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="pt-1 border-t flex justify-between text-sm font-bold text-gray-700">
+              <span>Total estimado</span>
+              <span>{formatMXN(nextItems.reduce((s, i) => s + i.amount, 0))}</span>
+            </div>
+          </>
+        )}
+      </div>
+
       {/* MSIs activos */}
       <div className="card p-4 space-y-3">
         <h2 className="font-semibold text-gray-800 text-sm flex items-center gap-2">
@@ -269,48 +312,6 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Próxima quincena — lista unificada */}
-      <div className="card p-4 space-y-2">
-        <h2 className="font-semibold text-gray-700 text-sm flex items-center gap-2">
-          Próxima quincena
-          <span className="font-normal text-gray-400 text-xs">{nextLabel}</span>
-          {nextItems.length > 0 && (
-            <span className="ml-auto text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-              {nextItems.length}
-            </span>
-          )}
-        </h2>
-        {nextItems.length === 0 ? (
-          <p className="text-sm text-gray-400">Sin pagos programados para la próxima quincena.</p>
-        ) : (
-          <>
-            <div className="space-y-0.5">
-              {nextItems.map(item => (
-                <div key={item.key} className="flex items-center justify-between py-2 border-b last:border-0 gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-gray-800 truncate">{item.concept}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                        item.type === 'fijo'       ? 'bg-blue-50 text-blue-600' :
-                        item.type === 'msi'        ? 'bg-purple-50 text-purple-600' :
-                        'bg-orange-50 text-orange-600'
-                      }`}>
-                        {item.type === 'fijo' ? 'Fijo' : item.type === 'msi' ? 'MSI' : 'Programado'}
-                      </span>
-                      {item.card && <span className="text-xs text-gray-400 truncate">{item.card}</span>}
-                    </div>
-                  </div>
-                  <span className="text-sm font-semibold text-gray-800 shrink-0">{formatMXN(item.amount)}</span>
-                </div>
-              ))}
-            </div>
-            <div className="pt-1 border-t flex justify-between text-sm font-bold text-gray-700">
-              <span>Total estimado</span>
-              <span>{formatMXN(nextItems.reduce((s, i) => s + i.amount, 0))}</span>
-            </div>
-          </>
-        )}
-      </div>
     </div>
   )
 }
