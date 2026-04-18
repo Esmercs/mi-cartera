@@ -9,6 +9,7 @@ import AddPeriodPaymentForm from '@/components/dashboard/add-period-payment-form
 import PeriodPaymentsList from '@/components/dashboard/period-payments-list'
 import AddIncomeForm from '@/components/dashboard/add-income-form'
 import RegisterNextPaymentButton from '@/components/dashboard/register-next-payment-button'
+import PayCardGroupButton from '@/components/dashboard/pay-card-group-button'
 
 export default async function DashboardPage() {
   const supabase = createServerClient()
@@ -156,6 +157,22 @@ export default async function DashboardPage() {
     })),
   ].sort((a, b) => b.amount - a.amount)
 
+  // Agrupar por tarjeta (null = sin tarjeta)
+  const cardGroupMap = new Map<string, { cardName: string; cardId: string; items: typeof nextItems }>()
+  const noCardItems: typeof nextItems = []
+
+  for (const item of nextItems) {
+    if (item.cardId && item.card) {
+      if (!cardGroupMap.has(item.cardId)) {
+        cardGroupMap.set(item.cardId, { cardName: item.card, cardId: item.cardId, items: [] })
+      }
+      cardGroupMap.get(item.cardId)!.items.push(item)
+    } else {
+      noCardItems.push(item)
+    }
+  }
+  const cardGroups = Array.from(cardGroupMap.values())
+
   // Ingreso actual
   const { data: currentIncome } = await supabase
     .from('income_config')
@@ -215,8 +232,8 @@ export default async function DashboardPage() {
         <PeriodPaymentsList payments={payments ?? []} />
       </div>
 
-      {/* Próxima quincena — lista unificada */}
-      <div className="card p-4 space-y-2">
+      {/* Próxima quincena — agrupado por tarjeta */}
+      <div className="card p-4 space-y-3">
         <h2 className="font-semibold text-gray-700 text-sm flex items-center gap-2">
           Próxima quincena
           <span className="font-normal text-gray-400 text-xs">{nextLabel}</span>
@@ -226,41 +243,81 @@ export default async function DashboardPage() {
             </span>
           )}
         </h2>
+
         {nextItems.length === 0 ? (
           <p className="text-sm text-gray-400">Sin pagos programados para la próxima quincena.</p>
         ) : (
           <>
-            <div className="space-y-0.5">
-              {nextItems.map(item => (
-                <div key={item.key} className="flex items-center justify-between py-2 border-b last:border-0 gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-gray-800 truncate">{item.concept}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
+            {/* Grupos por tarjeta */}
+            {cardGroups.map(group => {
+              const groupTotal = group.items.reduce((s, i) => s + i.amount, 0)
+              return (
+                <div key={group.cardId} className="border border-gray-100 rounded-xl overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2 bg-gray-50">
+                    <span className="text-xs font-semibold text-gray-600">{group.cardName}</span>
+                    <PayCardGroupButton
+                      periodId={period?.id ?? ''}
+                      cardName={group.cardName}
+                      items={group.items}
+                      totalAmount={groupTotal}
+                    />
+                  </div>
+                  <div className="divide-y divide-gray-50 px-3">
+                    {group.items.map(item => (
+                      <div key={item.key} className="flex items-center justify-between py-2 gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-gray-800 truncate">{item.concept}</p>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                            item.type === 'fijo' ? 'bg-blue-50 text-blue-600' :
+                            item.type === 'msi'  ? 'bg-purple-50 text-purple-600' :
+                            'bg-orange-50 text-orange-600'
+                          }`}>
+                            {item.type === 'fijo' ? 'Fijo' : item.type === 'msi' ? 'MSI' : 'Programado'}
+                          </span>
+                        </div>
+                        <span className="text-sm font-semibold text-gray-700 shrink-0">{formatMXN(item.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Ítems sin tarjeta — individuales */}
+            {noCardItems.length > 0 && (
+              <div className="space-y-0.5">
+                {cardGroups.length > 0 && (
+                  <p className="text-xs text-gray-400 font-medium pt-1">Sin tarjeta</p>
+                )}
+                {noCardItems.map(item => (
+                  <div key={item.key} className="flex items-center justify-between py-2 border-b last:border-0 gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-gray-800 truncate">{item.concept}</p>
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                        item.type === 'fijo'  ? 'bg-blue-50 text-blue-600' :
-                        item.type === 'msi'   ? 'bg-purple-50 text-purple-600' :
+                        item.type === 'fijo' ? 'bg-blue-50 text-blue-600' :
+                        item.type === 'msi'  ? 'bg-purple-50 text-purple-600' :
                         'bg-orange-50 text-orange-600'
                       }`}>
                         {item.type === 'fijo' ? 'Fijo' : item.type === 'msi' ? 'MSI' : 'Programado'}
                       </span>
-                      {item.card && <span className="text-xs text-gray-400 truncate">{item.card}</span>}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-sm font-semibold text-gray-800">{formatMXN(item.amount)}</span>
+                      <RegisterNextPaymentButton
+                        periodId={period?.id ?? ''}
+                        concept={item.concept}
+                        amount={item.amount}
+                        cardId={item.cardId}
+                        type={item.type}
+                        planId={item.planId}
+                        scheduledId={item.scheduledId}
+                      />
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-sm font-semibold text-gray-800">{formatMXN(item.amount)}</span>
-                    <RegisterNextPaymentButton
-                      periodId={period?.id ?? ''}
-                      concept={item.concept}
-                      amount={item.amount}
-                      cardId={item.cardId}
-                      type={item.type}
-                      planId={item.planId}
-                      scheduledId={item.scheduledId}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
+
             <div className="pt-1 border-t flex justify-between text-sm font-bold text-gray-700">
               <span>Total estimado</span>
               <span>{formatMXN(nextItems.reduce((s, i) => s + i.amount, 0))}</span>
