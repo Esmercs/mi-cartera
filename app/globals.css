@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --sidebar-width: 240px;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+  }
+
+  * {
+    @apply border-gray-200;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl border shadow-sm;
+  }
+
+  .btn-primary {
+    @apply bg-brand-600 text-white px-4 py-2 rounded-lg hover:bg-brand-700
+           font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-100
+           font-medium transition-colors;
+  }
+
+  .input {
+    @apply w-full border rounded-lg px-3 py-2 text-sm
+           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+  }
+
+  .badge-lalo {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+           bg-lalo-light text-lalo-dark;
+  }
+
+  .badge-ale {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+           bg-ale-light text-ale-dark;
+  }
+
+  .badge-shared {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+           bg-purple-100 text-purple-800;
+  }
+}
