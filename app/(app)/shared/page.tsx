@@ -48,8 +48,9 @@ export default async function SharedPage() {
   const totalAlePart    = (sharedExpenses ?? []).reduce((s, e) => s + e.ale_amount, 0)
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div>
+    <div className="space-y-4 max-w-5xl">
+      {/* Header — desktop */}
+      <div className="hidden md:block">
         <h1 className="text-2xl font-bold text-gray-900">Dashboard Compartido</h1>
         <p className="text-gray-500 text-sm mt-0.5">
           Gastos conjuntos · Split: Lalo {laloSplit?.percentage?.toFixed(1) ?? '—'}% / Ale {aleSplit?.percentage?.toFixed(1) ?? '—'}%
@@ -57,74 +58,98 @@ export default async function SharedPage() {
       </div>
 
       {/* Resumen de gastos compartidos */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="card p-4 bg-purple-50">
-          <p className="text-xs text-purple-600 font-medium">Total compartido/mes</p>
-          <p className="text-xl font-bold text-purple-800 mt-1">{formatMXN(totalShared)}</p>
+      <div className="grid grid-cols-3 gap-3">
+        <div className="card p-3 md:p-4 bg-purple-50">
+          <p className="text-xs text-purple-600 font-medium truncate">Compartido/mes</p>
+          <p className="text-base md:text-xl font-bold text-purple-800 mt-1">{formatMXN(totalShared)}</p>
         </div>
-        <div className="card p-4 bg-lalo-light">
-          <p className="text-xs text-lalo-dark font-medium">Parte Lalo</p>
-          <p className="text-xl font-bold text-lalo-dark mt-1">{formatMXN(totalLaloPart)}</p>
-          <p className="text-xs text-lalo">{laloSplit?.percentage?.toFixed(1)}%</p>
+        <div className="card p-3 md:p-4 bg-lalo-light">
+          <p className="text-xs text-lalo-dark font-medium">Lalo</p>
+          <p className="text-base md:text-xl font-bold text-lalo-dark mt-1">{formatMXN(totalLaloPart)}</p>
+          <p className="text-xs text-lalo">{laloSplit?.percentage?.toFixed(0)}%</p>
         </div>
-        <div className="card p-4 bg-ale-light">
-          <p className="text-xs text-ale-dark font-medium">Parte Ale</p>
-          <p className="text-xl font-bold text-ale-dark mt-1">{formatMXN(totalAlePart)}</p>
-          <p className="text-xs text-ale">{aleSplit?.percentage?.toFixed(1)}%</p>
+        <div className="card p-3 md:p-4 bg-ale-light">
+          <p className="text-xs text-ale-dark font-medium">Ale</p>
+          <p className="text-base md:text-xl font-bold text-ale-dark mt-1">{formatMXN(totalAlePart)}</p>
+          <p className="text-xs text-ale">{aleSplit?.percentage?.toFixed(0)}%</p>
         </div>
       </div>
 
       {/* Gastos compartidos */}
-      <section className="card p-5 space-y-4">
-        <h2 className="font-semibold text-gray-800">Gastos fijos compartidos</h2>
+      <section className="card p-4 md:p-5 space-y-3">
+        <h2 className="font-semibold text-gray-800 text-sm">Gastos fijos compartidos</h2>
         {!sharedExpenses?.length ? (
           <p className="text-sm text-gray-400">Sin gastos compartidos.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-gray-400 border-b">
-                  <th className="pb-2 font-medium">Concepto</th>
-                  <th className="pb-2 font-medium">Total</th>
-                  <th className="pb-2 font-medium text-lalo-dark">Lalo</th>
-                  <th className="pb-2 font-medium text-ale-dark">Ale</th>
-                  <th className="pb-2 font-medium">Próximo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sharedExpenses.map(e => (
-                  <tr key={e.id} className="border-b last:border-0 hover:bg-gray-50">
-                    <td className="py-2.5 font-medium text-gray-800">{e.concept}</td>
-                    <td className="py-2.5 text-gray-700">{formatMXN(e.total_amount)}</td>
-                    <td className="py-2.5 text-lalo font-medium">{formatMXN(e.lalo_amount)}</td>
-                    <td className="py-2.5 text-ale font-medium">{formatMXN(e.ale_amount)}</td>
-                    <td className={`py-2.5 text-xs ${isOverdue(e.next_payment_date) ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+          <>
+            {/* Mobile: card list */}
+            <div className="md:hidden space-y-2">
+              {sharedExpenses.map(e => (
+                <div key={e.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <div className="min-w-0 flex-1 mr-2">
+                    <p className="text-sm font-medium text-gray-800 truncate">{e.concept}</p>
+                    <p className="text-xs mt-0.5">
+                      <span className="text-lalo">{formatMXN(e.lalo_amount)}</span>
+                      <span className="text-gray-300 mx-1">·</span>
+                      <span className="text-ale">{formatMXN(e.ale_amount)}</span>
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-semibold text-gray-800">{formatMXN(e.total_amount)}</p>
+                    <p className={`text-xs ${isOverdue(e.next_payment_date) ? 'text-red-500' : 'text-gray-400'}`}>
                       {formatMXDate(e.next_payment_date)}
-                    </td>
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Desktop: table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-gray-400 border-b">
+                    <th className="pb-2 font-medium">Concepto</th>
+                    <th className="pb-2 font-medium">Total</th>
+                    <th className="pb-2 font-medium text-lalo-dark">Lalo</th>
+                    <th className="pb-2 font-medium text-ale-dark">Ale</th>
+                    <th className="pb-2 font-medium">Próximo</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {sharedExpenses.map(e => (
+                    <tr key={e.id} className="border-b last:border-0 hover:bg-gray-50">
+                      <td className="py-2.5 font-medium text-gray-800">{e.concept}</td>
+                      <td className="py-2.5 text-gray-700">{formatMXN(e.total_amount)}</td>
+                      <td className="py-2.5 text-lalo font-medium">{formatMXN(e.lalo_amount)}</td>
+                      <td className="py-2.5 text-ale font-medium">{formatMXN(e.ale_amount)}</td>
+                      <td className={`py-2.5 text-xs ${isOverdue(e.next_payment_date) ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+                        {formatMXDate(e.next_payment_date)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
 
       {/* Diversión */}
       {funSummary && (
-        <section className="card p-5 space-y-3">
-          <h2 className="font-semibold text-gray-800">Diversión — quincena actual</h2>
-          <div className="flex items-center gap-8">
+        <section className="card p-4 md:p-5 space-y-3">
+          <h2 className="font-semibold text-gray-800 text-sm">Diversión — quincena actual</h2>
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <p className="text-xs text-gray-400">Presupuesto</p>
-              <p className="text-lg font-bold text-gray-800">{formatMXN(funSummary.base_budget)}</p>
+              <p className="text-base md:text-lg font-bold text-gray-800">{formatMXN(funSummary.base_budget)}</p>
             </div>
             <div>
               <p className="text-xs text-gray-400">Gastado</p>
-              <p className="text-lg font-bold text-orange-600">{formatMXN(funSummary.total_spent)}</p>
+              <p className="text-base md:text-lg font-bold text-orange-600">{formatMXN(funSummary.total_spent)}</p>
             </div>
             <div>
               <p className="text-xs text-gray-400">Restante</p>
-              <p className={`text-lg font-bold ${funSummary.remaining_budget < 0 ? 'text-red-600' : 'text-green-700'}`}>
+              <p className={`text-base md:text-lg font-bold ${funSummary.remaining_budget < 0 ? 'text-red-600' : 'text-green-700'}`}>
                 {formatMXN(funSummary.remaining_budget)}
               </p>
             </div>

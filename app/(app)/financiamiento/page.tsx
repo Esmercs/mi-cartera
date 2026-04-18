@@ -24,8 +24,9 @@ export default async function FinanciamientoPage() {
   const totalDeuda   = active.reduce((s, p) => s + p.remaining_debt, 0)
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div className="flex items-start justify-between">
+    <div className="space-y-4 max-w-4xl">
+      {/* Header — desktop */}
+      <div className="hidden md:flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Financiamiento</h1>
           <p className="text-gray-500 text-sm mt-0.5">
@@ -35,19 +36,24 @@ export default async function FinanciamientoPage() {
         <AddInstallmentForm />
       </div>
 
+      {/* Header — mobile */}
+      <div className="flex items-center justify-end md:hidden">
+        <AddInstallmentForm />
+      </div>
+
       {/* Resumen */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="card p-4 bg-blue-50">
-          <p className="text-xs text-blue-600 font-medium">MSIs activos</p>
-          <p className="text-2xl font-bold text-blue-800 mt-1">{active.length}</p>
+      <div className="grid grid-cols-3 gap-3">
+        <div className="card p-3 md:p-4 bg-blue-50">
+          <p className="text-xs text-blue-600 font-medium">Activos</p>
+          <p className="text-xl md:text-2xl font-bold text-blue-800 mt-1">{active.length}</p>
         </div>
-        <div className="card p-4 bg-orange-50">
-          <p className="text-xs text-orange-600 font-medium">Pago mensual total</p>
-          <p className="text-xl font-bold text-orange-800 mt-1">{formatMXN(totalMensual)}</p>
+        <div className="card p-3 md:p-4 bg-orange-50">
+          <p className="text-xs text-orange-600 font-medium truncate">Pago/mes</p>
+          <p className="text-base md:text-xl font-bold text-orange-800 mt-1">{formatMXN(totalMensual)}</p>
         </div>
-        <div className="card p-4 bg-red-50">
-          <p className="text-xs text-red-600 font-medium">Deuda total restante</p>
-          <p className="text-xl font-bold text-red-800 mt-1">{formatMXN(totalDeuda)}</p>
+        <div className="card p-3 md:p-4 bg-red-50">
+          <p className="text-xs text-red-600 font-medium truncate">Deuda total</p>
+          <p className="text-base md:text-xl font-bold text-red-800 mt-1">{formatMXN(totalDeuda)}</p>
         </div>
       </div>
 

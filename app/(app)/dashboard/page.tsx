@@ -105,27 +105,31 @@ export default async function DashboardPage() {
   const totalToCollect = (debtsToCollect ?? []).reduce((sum, d) => sum + d.amount, 0)
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      {/* Header */}
-      <div className="flex items-start justify-between">
+    <div className="space-y-4 max-w-2xl mx-auto">
+      {/* Header — solo desktop (en móvil lo muestra MobileHeader) */}
+      <div className="hidden md:flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Mi Dashboard</h1>
           <p className="text-gray-500 text-sm mt-0.5">
-            Quincena: {periodLabel} · {format(start, "d 'de' MMMM", { locale: es })} – {format(end, "d 'de' MMMM yyyy", { locale: es })}
+            {format(start, "d 'de' MMMM", { locale: es })} – {format(end, "d 'de' MMMM yyyy", { locale: es })}
           </p>
         </div>
         <AddIncomeForm currentAmount={currentIncome?.amount ?? 0} />
       </div>
 
+      {/* Período + ingreso — móvil */}
+      <div className="flex items-center justify-between md:hidden">
+        <p className="text-xs text-gray-400">
+          {format(start, "d MMM", { locale: es })} – {format(end, "d MMM", { locale: es })}
+        </p>
+        <AddIncomeForm currentAmount={currentIncome?.amount ?? 0} />
+      </div>
+
       {/* Tarjetas de resumen */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-3">
+        <SummaryCard label="Ingreso quincenal" value={formatMXN(summary?.income ?? 0)} color="blue" />
         <SummaryCard
-          label="Ingreso quincenal"
-          value={formatMXN(summary?.income ?? 0)}
-          color="blue"
-        />
-        <SummaryCard
-          label="Pagado esta quincena"
+          label="Pagado"
           value={formatMXN((summary?.total_fijos_pagado ?? 0) + (summary?.total_extra_pagado ?? 0))}
           color="orange"
         />
@@ -134,96 +138,74 @@ export default async function DashboardPage() {
           value={formatMXN(summary?.restante_fijos ?? 0)}
           color={(summary?.restante_fijos ?? 0) < 0 ? 'red' : 'green'}
         />
-        <SummaryCard
-          label="MSI este mes"
-          value={formatMXN(totalMSI)}
-          color="purple"
-        />
+        <SummaryCard label="MSI/mes" value={formatMXN(totalMSI)} color="purple" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Quincena actual — pagos */}
-        <div className="card p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-gray-800">Pagos de la quincena</h2>
-            <AddPeriodPaymentForm periodId={period?.id ?? ''} />
-          </div>
-          <PeriodPaymentsList payments={payments ?? []} />
+      {/* Pagos de la quincena */}
+      <div className="card p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-gray-800 text-sm">Pagos de la quincena</h2>
+          <AddPeriodPaymentForm periodId={period?.id ?? ''} />
         </div>
+        <PeriodPaymentsList payments={payments ?? []} />
+      </div>
 
-        {/* MSIs activos */}
-        <div className="card p-5 space-y-4">
-          <h2 className="font-semibold text-gray-800">
-            Meses sin intereses activos
-            {(installments?.length ?? 0) > 0 && (
-              <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                {installments?.length}
-              </span>
-            )}
-          </h2>
-
-          {!installments?.length ? (
-            <p className="text-sm text-gray-400">Sin MSI activos.</p>
-          ) : (
-            <div className="space-y-3">
-              {installments.map(plan => (
-                <div key={plan.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{plan.concept}</p>
-                    <p className="text-xs text-gray-400">
-                      {(plan as any).cards?.name ?? '—'} · Mes {plan.current_month}/{plan.total_months}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-gray-800">
-                      {formatMXN(plan.monthly_amount)}/mes
-                    </p>
-                    <p className={`text-xs ${isOverdue(plan.next_payment_date) ? 'text-red-500' : 'text-gray-400'}`}>
-                      Próx: {formatMXDate(plan.next_payment_date)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+      {/* MSIs activos */}
+      <div className="card p-4 space-y-3">
+        <h2 className="font-semibold text-gray-800 text-sm flex items-center gap-2">
+          Meses sin intereses
+          {(installments?.length ?? 0) > 0 && (
+            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+              {installments?.length}
+            </span>
           )}
-        </div>
+        </h2>
+        {!installments?.length ? (
+          <p className="text-sm text-gray-400">Sin MSI activos.</p>
+        ) : (
+          <div className="space-y-2">
+            {installments.map(plan => (
+              <div key={plan.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                <div className="min-w-0 flex-1 mr-2">
+                  <p className="text-sm font-medium text-gray-800 truncate">{plan.concept}</p>
+                  <p className="text-xs text-gray-400">
+                    {(plan as any).cards?.name ?? '—'} · {plan.current_month}/{plan.total_months}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-semibold text-gray-800">{formatMXN(plan.monthly_amount)}</p>
+                  <p className={`text-xs ${isOverdue(plan.next_payment_date) ? 'text-red-500' : 'text-gray-400'}`}>
+                    {formatMXDate(plan.next_payment_date)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Deudas */}
-      {((debtsOwed?.length ?? 0) > 0 || (debtsToCollect?.length ?? 0) > 0) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {(debtsOwed?.length ?? 0) > 0 && (
-            <div className="card p-5 space-y-3">
-              <h2 className="font-semibold text-red-600">
-                Lo que debo · {formatMXN(totalOwed)}
-              </h2>
-              {debtsOwed!.map(d => (
-                <div key={d.id} className="flex justify-between text-sm py-1 border-b last:border-0">
-                  <span className="text-gray-700">{d.concept}</span>
-                  <span className="font-medium text-red-600">{formatMXN(d.amount)}</span>
-                </div>
-              ))}
+      {(debtsOwed?.length ?? 0) > 0 && (
+        <div className="card p-4 space-y-2">
+          <h2 className="font-semibold text-red-600 text-sm">Lo que debo · {formatMXN(totalOwed)}</h2>
+          {debtsOwed!.map(d => (
+            <div key={d.id} className="flex justify-between text-sm py-1 border-b last:border-0">
+              <span className="text-gray-700 truncate mr-2">{d.concept}</span>
+              <span className="font-medium text-red-600 shrink-0">{formatMXN(d.amount)}</span>
             </div>
-          )}
+          ))}
+        </div>
+      )}
 
-          {(debtsToCollect?.length ?? 0) > 0 && (
-            <div className="card p-5 space-y-3">
-              <h2 className="font-semibold text-green-700">
-                Me deben · {formatMXN(totalToCollect)}
-              </h2>
-              {debtsToCollect!.map(d => (
-                <div key={d.id} className="flex justify-between text-sm py-1 border-b last:border-0">
-                  <div>
-                    <span className="text-gray-700">{d.concept}</span>
-                    <span className="text-gray-400 ml-1 text-xs">
-                      ({(d as any).debtor?.display_name})
-                    </span>
-                  </div>
-                  <span className="font-medium text-green-700">{formatMXN(d.amount)}</span>
-                </div>
-              ))}
+      {(debtsToCollect?.length ?? 0) > 0 && (
+        <div className="card p-4 space-y-2">
+          <h2 className="font-semibold text-green-700 text-sm">Me deben · {formatMXN(totalToCollect)}</h2>
+          {debtsToCollect!.map(d => (
+            <div key={d.id} className="flex justify-between text-sm py-1 border-b last:border-0">
+              <span className="text-gray-700 truncate mr-2">{d.concept}</span>
+              <span className="font-medium text-green-700 shrink-0">{formatMXN(d.amount)}</span>
             </div>
-          )}
+          ))}
         </div>
       )}
     </div>
@@ -231,9 +213,7 @@ export default async function DashboardPage() {
 }
 
 function SummaryCard({
-  label,
-  value,
-  color,
+  label, value, color,
 }: {
   label: string
   value: string
@@ -247,9 +227,9 @@ function SummaryCard({
     red:    'bg-red-50 text-red-700',
   }
   return (
-    <div className={`card p-4 ${colors[color]}`}>
+    <div className={`card p-3 md:p-4 ${colors[color]}`}>
       <p className="text-xs font-medium opacity-70">{label}</p>
-      <p className="text-xl font-bold mt-1">{value}</p>
+      <p className="text-lg md:text-xl font-bold mt-0.5">{value}</p>
     </div>
   )
 }

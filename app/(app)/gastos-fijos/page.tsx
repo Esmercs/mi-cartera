@@ -44,8 +44,9 @@ export default async function GastosFijosPage() {
   const personalTotal = personal.reduce((s, e) => s + e.total_amount, 0)
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="flex items-start justify-between">
+    <div className="space-y-4 max-w-5xl">
+      {/* Header — desktop only */}
+      <div className="hidden md:flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Gastos Fijos</h1>
           <p className="text-gray-500 text-sm mt-0.5">
@@ -53,27 +54,34 @@ export default async function GastosFijosPage() {
             <span className="font-medium text-lalo">{laloSplit?.percentage?.toFixed(1) ?? '—'}%</span>
             {' '}· Ale:{' '}
             <span className="font-medium text-ale">{aleSplit?.percentage?.toFixed(1) ?? '—'}%</span>
-            {' '}(basado en ingresos configurados)
           </p>
         </div>
         <AddExpenseForm />
       </div>
 
+      {/* Header — mobile */}
+      <div className="flex items-center justify-between md:hidden">
+        <p className="text-xs text-gray-400">
+          Lalo {laloSplit?.percentage?.toFixed(0) ?? '—'}% · Ale {aleSplit?.percentage?.toFixed(0) ?? '—'}%
+        </p>
+        <AddExpenseForm />
+      </div>
+
       {/* Resumen */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <div className="card p-4 bg-gray-50">
-          <p className="text-xs text-gray-500 font-medium">Gastos personales</p>
-          <p className="text-xl font-bold text-gray-800 mt-1">{formatMXN(personalTotal)}</p>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="card p-3 md:p-4 bg-gray-50">
+          <p className="text-xs text-gray-500 font-medium">Personales</p>
+          <p className="text-lg md:text-xl font-bold text-gray-800 mt-1">{formatMXN(personalTotal)}</p>
           <p className="text-xs text-gray-400">/ mes</p>
         </div>
-        <div className="card p-4 bg-purple-50">
-          <p className="text-xs text-purple-700 font-medium">Mi parte de compartidos</p>
-          <p className="text-xl font-bold text-purple-800 mt-1">{formatMXN(mySharedTotal)}</p>
+        <div className="card p-3 md:p-4 bg-purple-50">
+          <p className="text-xs text-purple-700 font-medium">Mi parte compartidos</p>
+          <p className="text-lg md:text-xl font-bold text-purple-800 mt-1">{formatMXN(mySharedTotal)}</p>
           <p className="text-xs text-purple-500">/ mes</p>
         </div>
-        <div className="card p-4 bg-brand-50 col-span-2 lg:col-span-1">
+        <div className="card p-3 md:p-4 bg-brand-50 col-span-2">
           <p className="text-xs text-brand-700 font-medium">Total mi responsabilidad</p>
-          <p className="text-xl font-bold text-brand-800 mt-1">
+          <p className="text-lg md:text-xl font-bold text-brand-800 mt-1">
             {formatMXN(personalTotal + mySharedTotal)}
           </p>
           <p className="text-xs text-brand-500">/ mes</p>
@@ -81,8 +89,8 @@ export default async function GastosFijosPage() {
       </div>
 
       {/* Gastos personales */}
-      <section className="card p-5 space-y-4">
-        <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+      <section className="card p-4 md:p-5 space-y-3">
+        <h2 className="font-semibold text-gray-800 text-sm flex items-center gap-2">
           Gastos personales
           <span className={isLalo ? 'badge-lalo' : 'badge-ale'}>
             {profile?.display_name}
@@ -92,12 +100,12 @@ export default async function GastosFijosPage() {
       </section>
 
       {/* Gastos compartidos */}
-      <section className="card p-5 space-y-4">
-        <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+      <section className="card p-4 md:p-5 space-y-3">
+        <h2 className="font-semibold text-gray-800 text-sm flex items-center gap-2">
           Gastos compartidos
           <span className="badge-shared">Los 2</span>
           <span className="text-xs text-gray-400 font-normal ml-auto">
-            Total compartido: {formatMXN(shared.reduce((s, e) => s + e.total_amount, 0))}/mes
+            {formatMXN(shared.reduce((s, e) => s + e.total_amount, 0))}/mes
           </span>
         </h2>
         <ExpenseTable expenses={shared} showSplit isLalo={isLalo} />
@@ -120,45 +128,76 @@ function ExpenseTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-xs text-gray-400 border-b">
-            <th className="pb-2 font-medium">Concepto</th>
-            <th className="pb-2 font-medium">Total</th>
-            {showSplit && (
-              <>
-                <th className="pb-2 font-medium text-lalo">Lalo</th>
-                <th className="pb-2 font-medium text-ale">Ale</th>
-              </>
-            )}
-            <th className="pb-2 font-medium">Intervalo</th>
-            <th className="pb-2 font-medium">Próximo pago</th>
-            <th className="pb-2"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {expenses.map(e => (
-            <tr key={e.id} className="border-b last:border-0 hover:bg-gray-50">
-              <td className="py-2.5 font-medium text-gray-800">{e.concept}</td>
-              <td className="py-2.5 text-gray-700">{formatMXN(e.total_amount)}</td>
+    <>
+      {/* Mobile: card list */}
+      <div className="md:hidden space-y-2">
+        {expenses.map(e => (
+          <div key={e.id} className="flex items-center justify-between py-2 border-b last:border-0">
+            <div className="min-w-0 flex-1 mr-2">
+              <p className="text-sm font-medium text-gray-800 truncate">{e.concept}</p>
+              <p className="text-xs text-gray-400">
+                {intervalLabel(e.interval_type)} · {isOverdue(e.next_payment_date)
+                  ? <span className="text-red-500">{formatMXDate(e.next_payment_date)}</span>
+                  : formatMXDate(e.next_payment_date)
+                }
+              </p>
+              {showSplit && (
+                <p className="text-xs mt-0.5">
+                  <span className="text-lalo">{formatMXN(e.lalo_amount)}</span>
+                  <span className="text-gray-300 mx-1">·</span>
+                  <span className="text-ale">{formatMXN(e.ale_amount)}</span>
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-sm font-semibold text-gray-800">{formatMXN(e.total_amount)}</span>
+              <DeleteExpenseButton id={e.id} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop: table */}
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-gray-400 border-b">
+              <th className="pb-2 font-medium">Concepto</th>
+              <th className="pb-2 font-medium">Total</th>
               {showSplit && (
                 <>
-                  <td className="py-2.5 text-lalo font-medium">{formatMXN(e.lalo_amount)}</td>
-                  <td className="py-2.5 text-ale font-medium">{formatMXN(e.ale_amount)}</td>
+                  <th className="pb-2 font-medium text-lalo">Lalo</th>
+                  <th className="pb-2 font-medium text-ale">Ale</th>
                 </>
               )}
-              <td className="py-2.5 text-gray-500">{intervalLabel(e.interval_type)}</td>
-              <td className={`py-2.5 ${isOverdue(e.next_payment_date) ? 'text-red-500 font-medium' : 'text-gray-500'}`}>
-                {formatMXDate(e.next_payment_date)}
-              </td>
-              <td className="py-2.5">
-                <DeleteExpenseButton id={e.id} />
-              </td>
+              <th className="pb-2 font-medium">Intervalo</th>
+              <th className="pb-2 font-medium">Próximo pago</th>
+              <th className="pb-2"></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {expenses.map(e => (
+              <tr key={e.id} className="border-b last:border-0 hover:bg-gray-50">
+                <td className="py-2.5 font-medium text-gray-800">{e.concept}</td>
+                <td className="py-2.5 text-gray-700">{formatMXN(e.total_amount)}</td>
+                {showSplit && (
+                  <>
+                    <td className="py-2.5 text-lalo font-medium">{formatMXN(e.lalo_amount)}</td>
+                    <td className="py-2.5 text-ale font-medium">{formatMXN(e.ale_amount)}</td>
+                  </>
+                )}
+                <td className="py-2.5 text-gray-500">{intervalLabel(e.interval_type)}</td>
+                <td className={`py-2.5 ${isOverdue(e.next_payment_date) ? 'text-red-500 font-medium' : 'text-gray-500'}`}>
+                  {formatMXDate(e.next_payment_date)}
+                </td>
+                <td className="py-2.5">
+                  <DeleteExpenseButton id={e.id} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   )
 }

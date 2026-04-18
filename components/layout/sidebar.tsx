@@ -48,7 +48,7 @@ export default function Sidebar({ profile }: SidebarProps) {
   const isLalo = profile.display_name?.toLowerCase() === 'lalo'
 
   return (
-    <aside className="w-[240px] min-h-screen bg-white border-r flex flex-col">
+    <aside className="w-[240px] min-h-screen bg-white border-r flex flex-col sticky top-0 h-screen">
       {/* Logo */}
       <div className="px-6 py-5 border-b">
         <h1 className="text-xl font-bold text-brand-700">Mi Cartera</h1>
