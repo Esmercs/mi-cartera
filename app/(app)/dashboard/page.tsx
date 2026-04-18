@@ -36,7 +36,7 @@ export default async function DashboardPage() {
       .eq('owner_id', userId)
       .order('valid_from', { ascending: false })
       .limit(1)
-      .single()
+      .single() as { data: { amount: number } | null }
 
     const income = lastIncome?.amount ? lastIncome.amount / 2 : 0
 
