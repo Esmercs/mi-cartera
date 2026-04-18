@@ -5,6 +5,7 @@ import { formatMXDate, isOverdue } from '@/lib/utils/date-utils'
 import type { InstallmentPlan } from '@/types/database'
 import AddInstallmentForm from '@/components/financiamiento/add-installment-form'
 import RegisterPaymentButton from '@/components/financiamiento/register-payment-button'
+import EditInstallmentForm from '@/components/financiamiento/edit-installment-form'
 
 export default async function FinanciamientoPage() {
   const supabase = createServerClient()
@@ -137,7 +138,10 @@ function InstallmentCard({
         <p className={`text-sm ${overdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
           {overdue ? '⚠️ ' : ''}Próximo pago: {formatMXDate(plan.next_payment_date)}
         </p>
-        <RegisterPaymentButton planId={plan.id} monthlyAmount={plan.monthly_amount} />
+        <div className="flex items-center gap-2">
+          <EditInstallmentForm plan={plan} />
+          <RegisterPaymentButton planId={plan.id} monthlyAmount={plan.monthly_amount} />
+        </div>
       </div>
     </div>
   )
