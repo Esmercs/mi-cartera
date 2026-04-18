@@ -35,6 +35,7 @@ export default function AddInstallmentForm() {
       .eq('is_active', true)
 
     setCards(data ?? [])
+    setForm({ concept: '', total_months: '', monthly_amount: '', card_id: '', next_payment_date: '' })
     setOpen(true)
   }
 

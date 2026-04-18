@@ -33,7 +33,7 @@ export default function AddIncomeForm({ currentAmount }: { currentAmount: number
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => { setAmount(currentAmount.toString()); setOpen(true) }}
         className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800
                    border rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors"
       >

@@ -59,7 +59,10 @@ export default function AddExpenseForm() {
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="btn-primary flex items-center gap-1">
+      <button onClick={() => {
+        setForm({ concept: '', total_amount: '', ownership: 'shared', interval_type: 'mensual', next_payment_date: '' })
+        setOpen(true)
+      }} className="btn-primary flex items-center gap-1">
         <Plus size={16} /> Agregar gasto
       </button>
 
