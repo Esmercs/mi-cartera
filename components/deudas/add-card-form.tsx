@@ -8,7 +8,9 @@ export default function AddCardForm() {
   const router = useRouter()
   const supabase = createClient()
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ name: '', card_type: 'credit', last_four: '' })
+  const [form, setForm] = useState({
+    name: '', card_type: 'credit', last_four: '', credit_limit: '',
+  })
   const [loading, setLoading] = useState(false)
 
   function set(field: string, value: string) {
@@ -32,12 +34,13 @@ export default function AddCardForm() {
       card_type:       form.card_type,
       last_four:       form.last_four || null,
       current_balance: 0,
+      credit_limit:    parseFloat(form.credit_limit) || 0,
       is_active:       true,
     })
 
     setOpen(false)
     setLoading(false)
-    setForm({ name: '', card_type: 'credit', last_four: '' })
+    setForm({ name: '', card_type: 'credit', last_four: '', credit_limit: '' })
     router.refresh()
   }
 
@@ -52,15 +55,17 @@ export default function AddCardForm() {
 
       {open && (
         <div className="fixed inset-0 bg-black/40 flex items-end md:items-center justify-center z-50 p-4">
-          <div className="card p-5 w-full max-w-xs space-y-4">
+          <div className="card p-5 w-full max-w-sm space-y-4">
             <h3 className="font-semibold text-gray-800">Nueva tarjeta</h3>
             <form onSubmit={handleSubmit} className="space-y-3">
+
               <div>
                 <label className="label">Nombre</label>
                 <input className="input" value={form.name}
                   onChange={e => set('name', e.target.value)}
                   placeholder="BBVA, Visa, Liverpool..." required />
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Tipo</label>
@@ -72,12 +77,26 @@ export default function AddCardForm() {
                   </select>
                 </div>
                 <div>
-                  <label className="label">Últimos 4 (opcional)</label>
+                  <label className="label">Últimos 4 dígitos</label>
                   <input className="input" maxLength={4} value={form.last_four}
                     onChange={e => set('last_four', e.target.value)}
-                    placeholder="1234" />
+                    placeholder="Opcional" />
                 </div>
               </div>
+
+              {form.card_type === 'credit' && (
+                <div>
+                  <label className="label">Límite de crédito</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                    <input className="input pl-7" type="number" step="0.01" min="0"
+                      value={form.credit_limit}
+                      onChange={e => set('credit_limit', e.target.value)}
+                      placeholder="0.00" />
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-2 pt-1">
                 <button type="submit" disabled={loading} className="btn-primary flex-1">
                   {loading ? 'Guardando...' : 'Guardar'}
