@@ -38,7 +38,12 @@ export default function EditExpenseButton({
   const [loading, setLoading] = useState(false)
 
   function set(field: string, value: string) {
-    setForm(prev => ({ ...prev, [field]: value }))
+    setForm(prev => {
+      const next = { ...prev, [field]: value }
+      if (field === 'interval_type' && value === 'quincenal') next.payment_day = '0'
+      if (field === 'interval_type' && value !== 'quincenal' && prev.payment_day === '0') next.payment_day = '15'
+      return next
+    })
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -50,7 +55,7 @@ export default function EditExpenseButton({
         concept: form.concept,
         total_amount: parseFloat(form.total_amount),
         interval_type: form.interval_type,
-        payment_day: parseInt(form.payment_day) as 15 | 30,
+        payment_day: parseInt(form.payment_day) as 0 | 15 | 30,
       })
       .eq('id', id)
     setOpen(false)
@@ -104,9 +109,15 @@ export default function EditExpenseButton({
               <div>
                 <label className="label">Día de pago</label>
                 <select className="input" value={form.payment_day}
-                  onChange={e => set('payment_day', e.target.value)}>
-                  <option value="15">Día 15</option>
-                  <option value="30">Día 30 (fin de mes)</option>
+                  onChange={e => set('payment_day', e.target.value)}
+                  disabled={form.interval_type === 'quincenal'}>
+                  {form.interval_type === 'quincenal'
+                    ? <option value="0">Ambos (15 y 30)</option>
+                    : <>
+                        <option value="15">Día 15</option>
+                        <option value="30">Día 30 (fin de mes)</option>
+                      </>
+                  }
                 </select>
               </div>
               <div className="flex gap-2 pt-1">

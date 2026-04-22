@@ -99,7 +99,7 @@ export default async function SharedPage() {
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="text-right">
                       <p className="text-sm font-semibold text-gray-800">{formatMXN(e.total_amount)}</p>
-                      <p className="text-xs text-gray-400">Día {e.payment_day ?? '—'}</p>
+                      <p className="text-xs text-gray-400">{e.payment_day === 0 ? '15 y 30' : e.payment_day ? `Día ${e.payment_day}` : '—'}</p>
                     </div>
                     <EditExpenseButton
                       id={e.id}
@@ -132,7 +132,7 @@ export default async function SharedPage() {
                       <td className="py-2.5 text-gray-700">{formatMXN(e.total_amount)}</td>
                       <td className="py-2.5 text-lalo font-medium">{formatMXN(e.lalo_amount)}</td>
                       <td className="py-2.5 text-ale font-medium">{formatMXN(e.ale_amount)}</td>
-                      <td className="py-2.5 text-xs text-gray-400">Día {e.payment_day ?? '—'}</td>
+                      <td className="py-2.5 text-xs text-gray-400">{e.payment_day === 0 ? '15 y 30' : e.payment_day ? `Día ${e.payment_day}` : '—'}</td>
                       <td className="py-2.5">
                         <EditExpenseButton
                           id={e.id}

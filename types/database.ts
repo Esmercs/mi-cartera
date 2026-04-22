@@ -58,7 +58,7 @@ export interface RecurringExpense {
   concept: string
   total_amount: number
   interval_type: IntervalType
-  payment_day: 15 | 30
+  payment_day: 0 | 15 | 30  // 0 = ambos (quincenal)
   next_payment_date: string | null
   card_id: string | null
   is_active: boolean

@@ -114,13 +114,13 @@ export default async function DashboardPage() {
     .eq('is_paid', false)
     .order('payment_type', { ascending: true }) as { data: ScheduledPayment[] | null }
 
-  // 2. Gastos fijos (personales + compartidos) con payment_day igual al próximo corte
+  // 2. Gastos fijos: payment_day coincide con el próximo corte, o es quincenal (0 = ambos)
   const { data: nextFijos } = await supabase
     .from('recurring_expenses_split')
     .select('*')
     .eq('is_active', true)
     .in('ownership', [myOwnership, 'shared'])
-    .eq('payment_day', nextPayDay) as { data: RecurringExpenseSplit[] | null }
+    .or(`payment_day.eq.${nextPayDay},payment_day.eq.0`) as { data: RecurringExpenseSplit[] | null }
 
   // 3. MSIs con next_payment_date en la próxima quincena
   const { data: nextMSI } = await supabase

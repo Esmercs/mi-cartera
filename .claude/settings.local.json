@@ -12,7 +12,20 @@
       "Bash(git commit *)",
       "Bash(git remote *)",
       "Bash(git push *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(mkdir -p ~/Documents/NutricionPlanner)",
+      "Read(//Users/eduardoespinoza/Documents/**)",
+      "Bash(streamlit run *)",
+      "Bash(curl -s http://localhost:8501)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8501)",
+      "Bash(python3 -m streamlit --version)",
+      "Bash(python3 -m streamlit run app.py --server.port 8502)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8502)",
+      "Bash(pkill -f \"streamlit run\")",
+      "Bash(python3 -m streamlit run app.py --server.port 8502 --server.headless true)",
+      "Bash(supabase db *)",
+      "Bash(npx supabase *)"
     ]
   }
 }
