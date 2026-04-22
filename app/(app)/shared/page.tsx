@@ -5,6 +5,7 @@ import { formatMXDate, isOverdue } from '@/lib/utils/date-utils'
 import type { RecurringExpenseSplit, InstallmentPlan, FunBudgetSummary } from '@/types/database'
 import AddInterPersonDebtForm from '@/components/shared/add-inter-person-debt-form'
 import MarkDebtPaidButton from '@/components/shared/mark-debt-paid-button'
+import EditExpenseButton from '@/components/gastos-fijos/edit-expense-button'
 
 export default async function SharedPage() {
   const supabase = createServerClient()
@@ -95,11 +96,18 @@ export default async function SharedPage() {
                       <span className="text-ale">{formatMXN(e.ale_amount)}</span>
                     </p>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-semibold text-gray-800">{formatMXN(e.total_amount)}</p>
-                    <p className={`text-xs ${isOverdue(e.next_payment_date) ? 'text-red-500' : 'text-gray-400'}`}>
-                      {formatMXDate(e.next_payment_date)}
-                    </p>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-gray-800">{formatMXN(e.total_amount)}</p>
+                      <p className="text-xs text-gray-400">Día {e.payment_day ?? '—'}</p>
+                    </div>
+                    <EditExpenseButton
+                      id={e.id}
+                      concept={e.concept}
+                      totalAmount={e.total_amount}
+                      intervalType={e.interval_type}
+                      paymentDay={e.payment_day ?? 15}
+                    />
                   </div>
                 </div>
               ))}
@@ -113,7 +121,8 @@ export default async function SharedPage() {
                     <th className="pb-2 font-medium">Total</th>
                     <th className="pb-2 font-medium text-lalo-dark">Lalo</th>
                     <th className="pb-2 font-medium text-ale-dark">Ale</th>
-                    <th className="pb-2 font-medium">Próximo</th>
+                    <th className="pb-2 font-medium">Día de pago</th>
+                    <th className="pb-2"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -123,8 +132,15 @@ export default async function SharedPage() {
                       <td className="py-2.5 text-gray-700">{formatMXN(e.total_amount)}</td>
                       <td className="py-2.5 text-lalo font-medium">{formatMXN(e.lalo_amount)}</td>
                       <td className="py-2.5 text-ale font-medium">{formatMXN(e.ale_amount)}</td>
-                      <td className={`py-2.5 text-xs ${isOverdue(e.next_payment_date) ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
-                        {formatMXDate(e.next_payment_date)}
+                      <td className="py-2.5 text-xs text-gray-400">Día {e.payment_day ?? '—'}</td>
+                      <td className="py-2.5">
+                        <EditExpenseButton
+                          id={e.id}
+                          concept={e.concept}
+                          totalAmount={e.total_amount}
+                          intervalType={e.interval_type}
+                          paymentDay={e.payment_day ?? 15}
+                        />
                       </td>
                     </tr>
                   ))}
