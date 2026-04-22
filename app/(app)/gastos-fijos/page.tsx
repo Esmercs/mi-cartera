@@ -136,7 +136,7 @@ function ExpenseTable({
             <div className="min-w-0 flex-1 mr-2">
               <p className="text-sm font-medium text-gray-800 truncate">{e.concept}</p>
               <p className="text-xs text-gray-400">
-                {intervalLabel(e.interval_type)} · Día {e.payment_day}
+                {intervalLabel(e.interval_type)} · Día {e.payment_day ?? '—'}
               </p>
               {showSplit && (
                 <p className="text-xs mt-0.5">
@@ -153,7 +153,7 @@ function ExpenseTable({
                 concept={e.concept}
                 totalAmount={e.total_amount}
                 intervalType={e.interval_type}
-                paymentDay={e.payment_day}
+                paymentDay={e.payment_day ?? 15}
               />
               <DeleteExpenseButton id={e.id} />
             </div>
@@ -192,7 +192,7 @@ function ExpenseTable({
                 )}
                 <td className="py-2.5 text-gray-500">{intervalLabel(e.interval_type)}</td>
                 <td className="py-2.5 text-gray-500">
-                  Día {e.payment_day}
+                  Día {e.payment_day ?? '—'}
                 </td>
                 <td className="py-2.5">
                   <div className="flex items-center gap-1">
@@ -201,7 +201,7 @@ function ExpenseTable({
                       concept={e.concept}
                       totalAmount={e.total_amount}
                       intervalType={e.interval_type}
-                      paymentDay={e.payment_day}
+                      paymentDay={e.payment_day ?? 15}
                     />
                     <DeleteExpenseButton id={e.id} />
                   </div>

@@ -33,7 +33,7 @@ export default function EditExpenseButton({
     concept,
     total_amount: totalAmount.toString(),
     interval_type: intervalType,
-    payment_day: paymentDay.toString(),
+    payment_day: (paymentDay ?? 15).toString(),
   })
   const [loading, setLoading] = useState(false)
 
@@ -66,7 +66,7 @@ export default function EditExpenseButton({
             concept,
             total_amount: totalAmount.toString(),
             interval_type: intervalType,
-            payment_day: paymentDay.toString(),
+            payment_day: (paymentDay ?? 15).toString(),
           })
           setOpen(true)
         }}
