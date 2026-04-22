@@ -24,7 +24,7 @@ export default function AddExpenseForm() {
     total_amount: '',
     ownership: 'shared' as Ownership,
     interval_type: 'mensual' as IntervalType,
-    next_payment_date: '',
+    payment_day: '15',
   })
   const [loading, setLoading] = useState(false)
 
@@ -49,7 +49,7 @@ export default function AddExpenseForm() {
       concept: form.concept,
       total_amount: parseFloat(form.total_amount),
       interval_type: form.interval_type,
-      next_payment_date: form.next_payment_date || null,
+      payment_day: parseInt(form.payment_day) as 15 | 30,
     })
 
     setOpen(false)
@@ -60,7 +60,7 @@ export default function AddExpenseForm() {
   return (
     <>
       <button onClick={() => {
-        setForm({ concept: '', total_amount: '', ownership: 'shared', interval_type: 'mensual', next_payment_date: '' })
+        setForm({ concept: '', total_amount: '', ownership: 'shared', interval_type: 'mensual', payment_day: '15' })
         setOpen(true)
       }} className="btn-primary flex items-center gap-1">
         <Plus size={16} /> Agregar gasto
@@ -103,9 +103,12 @@ export default function AddExpenseForm() {
                 </select>
               </div>
               <div>
-                <label className="label">Próximo pago</label>
-                <input className="input" type="date" value={form.next_payment_date}
-                  onChange={e => set('next_payment_date', e.target.value)} />
+                <label className="label">Día de pago</label>
+                <select className="input" value={form.payment_day}
+                  onChange={e => set('payment_day', e.target.value)}>
+                  <option value="15">Día 15</option>
+                  <option value="30">Día 30 (fin de mes)</option>
+                </select>
               </div>
               <div className="flex gap-2 pt-1">
                 <button type="submit" disabled={loading} className="btn-primary flex-1">

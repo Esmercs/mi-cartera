@@ -20,11 +20,11 @@ interface Props {
   concept: string
   totalAmount: number
   intervalType: IntervalType
-  nextPaymentDate: string | null
+  paymentDay: 15 | 30
 }
 
 export default function EditExpenseButton({
-  id, concept, totalAmount, intervalType, nextPaymentDate,
+  id, concept, totalAmount, intervalType, paymentDay,
 }: Props) {
   const router = useRouter()
   const supabase = createClient()
@@ -33,7 +33,7 @@ export default function EditExpenseButton({
     concept,
     total_amount: totalAmount.toString(),
     interval_type: intervalType,
-    next_payment_date: nextPaymentDate ?? '',
+    payment_day: paymentDay.toString(),
   })
   const [loading, setLoading] = useState(false)
 
@@ -50,7 +50,7 @@ export default function EditExpenseButton({
         concept: form.concept,
         total_amount: parseFloat(form.total_amount),
         interval_type: form.interval_type,
-        next_payment_date: form.next_payment_date || null,
+        payment_day: parseInt(form.payment_day) as 15 | 30,
       })
       .eq('id', id)
     setOpen(false)
@@ -66,7 +66,7 @@ export default function EditExpenseButton({
             concept,
             total_amount: totalAmount.toString(),
             interval_type: intervalType,
-            next_payment_date: nextPaymentDate ?? '',
+            payment_day: paymentDay.toString(),
           })
           setOpen(true)
         }}
@@ -102,9 +102,12 @@ export default function EditExpenseButton({
                 </select>
               </div>
               <div>
-                <label className="label">Próximo pago</label>
-                <input className="input" type="date" value={form.next_payment_date}
-                  onChange={e => set('next_payment_date', e.target.value)} />
+                <label className="label">Día de pago</label>
+                <select className="input" value={form.payment_day}
+                  onChange={e => set('payment_day', e.target.value)}>
+                  <option value="15">Día 15</option>
+                  <option value="30">Día 30 (fin de mes)</option>
+                </select>
               </div>
               <div className="flex gap-2 pt-1">
                 <button type="submit" disabled={loading} className="btn-primary flex-1">

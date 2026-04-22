@@ -1,7 +1,7 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
-import { formatMXDate, intervalLabel, isOverdue } from '@/lib/utils/date-utils'
+import { intervalLabel } from '@/lib/utils/date-utils'
 import type { RecurringExpenseSplit } from '@/types/database'
 import AddExpenseForm from '@/components/gastos-fijos/add-expense-form'
 import DeleteExpenseButton from '@/components/gastos-fijos/delete-expense-button'
@@ -136,10 +136,7 @@ function ExpenseTable({
             <div className="min-w-0 flex-1 mr-2">
               <p className="text-sm font-medium text-gray-800 truncate">{e.concept}</p>
               <p className="text-xs text-gray-400">
-                {intervalLabel(e.interval_type)} · {isOverdue(e.next_payment_date)
-                  ? <span className="text-red-500">{formatMXDate(e.next_payment_date)}</span>
-                  : formatMXDate(e.next_payment_date)
-                }
+                {intervalLabel(e.interval_type)} · Día {e.payment_day}
               </p>
               {showSplit && (
                 <p className="text-xs mt-0.5">
@@ -156,7 +153,7 @@ function ExpenseTable({
                 concept={e.concept}
                 totalAmount={e.total_amount}
                 intervalType={e.interval_type}
-                nextPaymentDate={e.next_payment_date}
+                paymentDay={e.payment_day}
               />
               <DeleteExpenseButton id={e.id} />
             </div>
@@ -178,7 +175,7 @@ function ExpenseTable({
                 </>
               )}
               <th className="pb-2 font-medium">Intervalo</th>
-              <th className="pb-2 font-medium">Próximo pago</th>
+              <th className="pb-2 font-medium">Día de pago</th>
               <th className="pb-2"></th>
             </tr>
           </thead>
@@ -194,8 +191,8 @@ function ExpenseTable({
                   </>
                 )}
                 <td className="py-2.5 text-gray-500">{intervalLabel(e.interval_type)}</td>
-                <td className={`py-2.5 ${isOverdue(e.next_payment_date) ? 'text-red-500 font-medium' : 'text-gray-500'}`}>
-                  {formatMXDate(e.next_payment_date)}
+                <td className="py-2.5 text-gray-500">
+                  Día {e.payment_day}
                 </td>
                 <td className="py-2.5">
                   <div className="flex items-center gap-1">
@@ -204,7 +201,7 @@ function ExpenseTable({
                       concept={e.concept}
                       totalAmount={e.total_amount}
                       intervalType={e.interval_type}
-                      nextPaymentDate={e.next_payment_date}
+                      paymentDay={e.payment_day}
                     />
                     <DeleteExpenseButton id={e.id} />
                   </div>

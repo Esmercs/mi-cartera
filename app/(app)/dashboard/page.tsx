@@ -1,7 +1,7 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
-import { formatMXDate, isOverdue, getCurrentPeriodDates, getNextPeriodDates } from '@/lib/utils/date-utils'
+import { formatMXDate, isOverdue, getCurrentPeriodDates, getNextPeriodDates, getNextPaymentDay } from '@/lib/utils/date-utils'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import type { PeriodSummary, InstallmentPlan, InterPersonDebt, IncomeConfig, ScheduledPayment, RecurringExpenseSplit } from '@/types/database'
@@ -95,7 +95,8 @@ export default async function DashboardPage() {
     .eq('is_paid', false) as { data: InterPersonDebt[] | null }
 
   // Próxima quincena — todas las fuentes
-  const { start: nextStart, end: nextEnd, label: nextLabel } = getNextPeriodDates()
+  const { start: nextStart, end: nextEnd, label: _nextLabel } = getNextPeriodDates()
+  const { day: nextPayDay, label: nextLabel } = getNextPaymentDay()
   const nextPeriodStr  = format(nextEnd, 'yyyy-MM-dd')
   const nextStartStr   = format(nextStart, 'yyyy-MM-dd')
 
@@ -113,14 +114,13 @@ export default async function DashboardPage() {
     .eq('is_paid', false)
     .order('payment_type', { ascending: true }) as { data: ScheduledPayment[] | null }
 
-  // 2. Gastos fijos (personales + compartidos) con next_payment_date en la próxima quincena
+  // 2. Gastos fijos (personales + compartidos) con payment_day igual al próximo corte
   const { data: nextFijos } = await supabase
     .from('recurring_expenses_split')
     .select('*')
     .eq('is_active', true)
     .in('ownership', [myOwnership, 'shared'])
-    .gte('next_payment_date', nextStartStr)
-    .lte('next_payment_date', nextPeriodStr) as { data: RecurringExpenseSplit[] | null }
+    .eq('payment_day', nextPayDay) as { data: RecurringExpenseSplit[] | null }
 
   // 3. MSIs con next_payment_date en la próxima quincena
   const { data: nextMSI } = await supabase

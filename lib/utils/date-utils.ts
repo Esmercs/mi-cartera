@@ -41,6 +41,22 @@ export function nextPaymentDate(
   }
 }
 
+// Returns the next payment cutoff: if today <= 15, next is the 15th; otherwise the last day of month (stored as 30)
+export function getNextPaymentDay(): { day: 15 | 30; label: string } {
+  const today = new Date()
+  const d = today.getDate()
+  const year = today.getFullYear()
+  const month = today.getMonth()
+
+  if (d <= 15) {
+    const date = new Date(year, month, 15)
+    return { day: 15, label: format(date, "15 MMM yyyy", { locale: es }) }
+  } else {
+    const lastDay = new Date(year, month + 1, 0)
+    return { day: 30, label: format(lastDay, "d MMM yyyy", { locale: es }) }
+  }
+}
+
 export function getCurrentPeriodDates(): { start: Date; end: Date; label: string } {
   const now = new Date()
   const day = now.getDate()
