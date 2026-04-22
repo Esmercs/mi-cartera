@@ -5,6 +5,7 @@ import { formatMXDate, intervalLabel, isOverdue } from '@/lib/utils/date-utils'
 import type { RecurringExpenseSplit } from '@/types/database'
 import AddExpenseForm from '@/components/gastos-fijos/add-expense-form'
 import DeleteExpenseButton from '@/components/gastos-fijos/delete-expense-button'
+import EditExpenseButton from '@/components/gastos-fijos/edit-expense-button'
 
 export default async function GastosFijosPage() {
   const supabase = createServerClient()
@@ -150,6 +151,13 @@ function ExpenseTable({
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-sm font-semibold text-gray-800">{formatMXN(e.total_amount)}</span>
+              <EditExpenseButton
+                id={e.id}
+                concept={e.concept}
+                totalAmount={e.total_amount}
+                intervalType={e.interval_type}
+                nextPaymentDate={e.next_payment_date}
+              />
               <DeleteExpenseButton id={e.id} />
             </div>
           </div>
@@ -190,7 +198,16 @@ function ExpenseTable({
                   {formatMXDate(e.next_payment_date)}
                 </td>
                 <td className="py-2.5">
-                  <DeleteExpenseButton id={e.id} />
+                  <div className="flex items-center gap-1">
+                    <EditExpenseButton
+                      id={e.id}
+                      concept={e.concept}
+                      totalAmount={e.total_amount}
+                      intervalType={e.interval_type}
+                      nextPaymentDate={e.next_payment_date}
+                    />
+                    <DeleteExpenseButton id={e.id} />
+                  </div>
                 </td>
               </tr>
             ))}
