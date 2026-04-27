@@ -1,7 +1,7 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
-import { formatMXDate, isOverdue, getCurrentPeriodDates, getNextPeriodDates, getNextPaymentDay } from '@/lib/utils/date-utils'
+import { formatMXDate, isOverdue, getCurrentPeriodDates, getOffsetPeriodDates } from '@/lib/utils/date-utils'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import type { PeriodSummary, InstallmentPlan, InterPersonDebt, IncomeConfig, ScheduledPayment, RecurringExpenseSplit } from '@/types/database'
@@ -9,10 +9,14 @@ import AddPeriodPaymentForm from '@/components/dashboard/add-period-payment-form
 import PeriodPaymentsList from '@/components/dashboard/period-payments-list'
 import AddIncomeForm from '@/components/dashboard/add-income-form'
 import RegisterNextPaymentButton from '@/components/dashboard/register-next-payment-button'
-import PayCardGroupButton from '@/components/dashboard/pay-card-group-button'
+import CollapsibleCardGroup from '@/components/dashboard/collapsible-card-group'
 import MarkDebtPaidButton from '@/components/shared/mark-debt-paid-button'
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: { p?: string }
+}) {
   const supabase = createServerClient()
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) redirect('/login')
@@ -59,86 +63,49 @@ export default async function DashboardPage() {
     period = newPeriod
   }
 
-  // Resumen de la quincena
-  const { data: summary } = await supabase
-    .from('period_summary')
-    .select('*')
-    .eq('id', period?.id)
-    .single() as { data: PeriodSummary | null }
+  // Próxima quincena — offset navegable (p=0 = quincena actual, p=1 = siguiente, etc.)
+  const periodOffset = Math.max(0, parseInt(searchParams.p ?? '0') || 0)
+  const { start: nextStart, end: nextEnd, label: nextLabel, payDay: nextPayDay } = getOffsetPeriodDates(periodOffset)
+  const nextPeriodStr = format(nextEnd, 'yyyy-MM-dd')
+  const nextStartStr  = format(nextStart, 'yyyy-MM-dd')
 
-  // Pagos de la quincena actual
-  const { data: payments } = await supabase
-    .from('period_payments')
-    .select('*, cards(name)')
-    .eq('period_id', period?.id ?? '')
-    .order('paid_at', { ascending: false })
+  // Grupo 1: queries independientes en paralelo
+  const [
+    { data: summary },
+    { data: payments },
+    { data: installments },
+    { data: debtsOwed },
+    { data: debtsToCollect },
+    { data: profile },
+    { data: currentIncome },
+    { data: nextScheduled },
+    { data: nextMSI },
+    { data: nextDebts },
+  ] = await Promise.all([
+    supabase.from('period_summary').select('*').eq('id', period?.id).single() as Promise<{ data: PeriodSummary | null }>,
+    supabase.from('period_payments').select('*, cards(name)').eq('period_id', period?.id ?? '').order('paid_at', { ascending: false }),
+    supabase.from('installment_plans').select('*, cards(name)').eq('owner_id', userId).eq('is_active', true).order('next_payment_date', { ascending: true }) as Promise<{ data: InstallmentPlan[] | null }>,
+    supabase.from('inter_person_debts').select('*, creditor:profiles!creditor_id(display_name, full_name)').eq('debtor_id', userId).eq('is_paid', false) as Promise<{ data: InterPersonDebt[] | null }>,
+    supabase.from('inter_person_debts').select('*, debtor:profiles!debtor_id(display_name, full_name)').eq('creditor_id', userId).eq('is_paid', false) as Promise<{ data: InterPersonDebt[] | null }>,
+    supabase.from('profiles').select('display_name').eq('id', userId).single(),
+    supabase.from('income_config').select('amount, valid_from').eq('owner_id', userId).order('valid_from', { ascending: false }).limit(1).single() as Promise<{ data: IncomeConfig | null }>,
+    supabase.from('scheduled_payments').select('*, cards(name)').eq('owner_id', userId).eq('period_date', nextPeriodStr).eq('is_paid', false).order('payment_type', { ascending: true }) as Promise<{ data: ScheduledPayment[] | null }>,
+    supabase.from('installment_plans').select('*, cards(name)').eq('owner_id', userId).eq('is_active', true).gte('next_payment_date', nextStartStr).lte('next_payment_date', nextPeriodStr) as Promise<{ data: InstallmentPlan[] | null }>,
+    supabase.from('inter_person_debts').select('*, creditor:profiles!creditor_id(display_name)').eq('debtor_id', userId).eq('is_paid', false).gte('due_date', nextStartStr).lte('due_date', nextPeriodStr) as Promise<{ data: any[] | null }>,
+  ])
 
-  // MSIs activos del usuario
-  const { data: installments } = await supabase
-    .from('installment_plans')
-    .select('*, cards(name)')
-    .eq('owner_id', userId)
-    .eq('is_active', true)
-    .order('next_payment_date', { ascending: true }) as { data: InstallmentPlan[] | null }
-
-  // Deudas interpersonales
-  const { data: debtsOwed } = await supabase
-    .from('inter_person_debts')
-    .select('*, creditor:profiles!creditor_id(display_name, full_name)')
-    .eq('debtor_id', userId)
-    .eq('is_paid', false) as { data: InterPersonDebt[] | null }
-
-  const { data: debtsToCollect } = await supabase
-    .from('inter_person_debts')
-    .select('*, debtor:profiles!debtor_id(display_name, full_name)')
-    .eq('creditor_id', userId)
-    .eq('is_paid', false) as { data: InterPersonDebt[] | null }
-
-  // Próxima quincena — todas las fuentes
-  const { start: nextStart, end: nextEnd, label: _nextLabel } = getNextPeriodDates()
-  const { day: nextPayDay, label: nextLabel } = getNextPaymentDay()
-  const nextPeriodStr  = format(nextEnd, 'yyyy-MM-dd')
-  const nextStartStr   = format(nextStart, 'yyyy-MM-dd')
-
-  const { data: profile } = await supabase
-    .from('profiles').select('display_name').eq('id', userId).single()
-  const isLalo     = profile?.display_name?.toLowerCase() === 'lalo'
+  const isLalo      = (profile as any)?.display_name?.toLowerCase() === 'lalo'
   const myOwnership = isLalo ? 'lalo' : 'ale'
 
-  // 1. Pagos programados del usuario
-  const { data: nextScheduled } = await supabase
-    .from('scheduled_payments')
-    .select('*, cards(name)')
-    .eq('owner_id', userId)
-    .eq('period_date', nextPeriodStr)
-    .eq('is_paid', false)
-    .order('payment_type', { ascending: true }) as { data: ScheduledPayment[] | null }
+  // Grupo 2: gastos fijos + tarjetas (dependen de myOwnership) en paralelo
+  const [{ data: nextFijosByDay }, { data: nextFijosByDate }, { data: allCards }] = await Promise.all([
+    supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']).or(`payment_day.eq.${nextPayDay},payment_day.eq.0,payment_day.is.null`).in('interval_type', ['quincenal', 'mensual']) as Promise<{ data: RecurringExpenseSplit[] | null }>,
+    supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']).in('interval_type', ['bimestral', 'trimestral', 'anual', 'c/15 dias', 'c/21 dias']).gte('next_payment_date', nextStartStr).lte('next_payment_date', nextPeriodStr) as Promise<{ data: RecurringExpenseSplit[] | null }>,
+    supabase.from('cards').select('id, name').eq('is_active', true),
+  ])
+  const cardNameMap = new Map((allCards ?? []).map(c => [c.id, c.name]))
 
-  // 2. Gastos fijos: payment_day coincide con el próximo corte, o es quincenal (0 = ambos)
-  const { data: nextFijos } = await supabase
-    .from('recurring_expenses_split')
-    .select('*')
-    .eq('is_active', true)
-    .in('ownership', [myOwnership, 'shared'])
-    .or(`payment_day.eq.${nextPayDay},payment_day.eq.0`) as { data: RecurringExpenseSplit[] | null }
-
-  // 3. MSIs con next_payment_date en la próxima quincena
-  const { data: nextMSI } = await supabase
-    .from('installment_plans')
-    .select('*, cards(name)')
-    .eq('owner_id', userId)
-    .eq('is_active', true)
-    .gte('next_payment_date', nextStartStr)
-    .lte('next_payment_date', nextPeriodStr) as { data: InstallmentPlan[] | null }
-
-  // 4. Deudas personales con vencimiento en la próxima quincena
-  const { data: nextDebts } = await supabase
-    .from('inter_person_debts')
-    .select('*, creditor:profiles!creditor_id(display_name)')
-    .eq('debtor_id', userId)
-    .eq('is_paid', false)
-    .gte('due_date', nextStartStr)
-    .lte('due_date', nextPeriodStr) as { data: any[] | null }
+  const nextFijos = [...(nextFijosByDay ?? []), ...(nextFijosByDate ?? [])]
 
   // Unificar en una lista ordenada por monto descendente
   type NextItem = {
@@ -147,6 +114,7 @@ export default async function DashboardPage() {
     cardId: string | null; planId: string | null; scheduledId: string | null
     debtId: string | null; creditorName: string | null
     totalInstallments: number | null; paidInstallments: number; dueDate: string | null
+    recurringExpenseId: string | null; intervalType: string | null; currentNextPaymentDate: string | null
   }
   const nextItems: NextItem[] = [
     ...(nextScheduled ?? []).map(p => ({
@@ -156,15 +124,23 @@ export default async function DashboardPage() {
       cardId: p.card_id ?? null, planId: null, scheduledId: p.id,
       debtId: null, creditorName: null,
       totalInstallments: null, paidInstallments: 0, dueDate: null,
+      recurringExpenseId: null, intervalType: null, currentNextPaymentDate: null,
     })),
-    ...(nextFijos ?? []).map(e => ({
-      key: e.id, concept: e.concept,
-      amount: e.ownership === 'shared' ? (isLalo ? e.lalo_amount : e.ale_amount) : e.total_amount,
-      card: null, type: 'fijo' as const,
-      cardId: null, planId: null, scheduledId: null,
-      debtId: null, creditorName: null,
-      totalInstallments: null, paidInstallments: 0, dueDate: null,
-    })),
+    ...(nextFijos).map(e => {
+      const isDateBased = ['bimestral', 'trimestral', 'anual', 'c/15 dias', 'c/21 dias'].includes(e.interval_type)
+      const cardName = e.card_id ? (cardNameMap.get(e.card_id) ?? null) : null
+      return {
+        key: e.id, concept: e.concept,
+        amount: e.ownership === 'shared' ? (isLalo ? e.lalo_amount : e.ale_amount) : e.total_amount,
+        card: cardName, type: 'fijo' as const,
+        cardId: e.card_id ?? null, planId: null, scheduledId: null,
+        debtId: null, creditorName: null,
+        totalInstallments: null, paidInstallments: 0, dueDate: null,
+        recurringExpenseId: isDateBased ? e.id : null,
+        intervalType: isDateBased ? e.interval_type : null,
+        currentNextPaymentDate: isDateBased ? (e.next_payment_date ?? null) : null,
+      }
+    }),
     ...(nextMSI ?? []).map(p => ({
       key: p.id, concept: p.concept, amount: p.monthly_amount,
       card: (p as any).cards?.name ?? null,
@@ -172,6 +148,7 @@ export default async function DashboardPage() {
       cardId: p.card_id ?? null, planId: p.id, scheduledId: null,
       debtId: null, creditorName: null,
       totalInstallments: null, paidInstallments: 0, dueDate: null,
+      recurringExpenseId: null, intervalType: null, currentNextPaymentDate: null,
     })),
     ...(nextDebts ?? []).map(d => ({
       key: d.id, concept: d.concept, amount: d.amount,
@@ -181,6 +158,7 @@ export default async function DashboardPage() {
       totalInstallments: d.total_installments ?? null,
       paidInstallments: d.paid_installments ?? 0,
       dueDate: d.due_date ?? null,
+      recurringExpenseId: null, intervalType: null, currentNextPaymentDate: null,
     })),
   ].sort((a, b) => b.amount - a.amount)
 
@@ -200,20 +178,17 @@ export default async function DashboardPage() {
   }
   const cardGroups = Array.from(cardGroupMap.values())
 
-  // Ingreso actual
-  const { data: currentIncome } = await supabase
-    .from('income_config')
-    .select('amount, valid_from')
-    .eq('owner_id', userId)
-    .order('valid_from', { ascending: false })
-    .limit(1)
-    .single() as { data: IncomeConfig | null }
 
   const totalMSI = (installments ?? []).reduce((sum, p) => sum + p.monthly_amount, 0)
   const debtPending = (d: InterPersonDebt) =>
     d.total_installments ? d.amount * (d.total_installments - d.paid_installments) : d.amount
   const totalOwed       = (debtsOwed      ?? []).reduce((sum, d) => sum + debtPending(d), 0)
   const totalToCollect  = (debtsToCollect ?? []).reduce((sum, d) => sum + debtPending(d), 0)
+
+  // Resumen calculado desde el ingreso vigente (no el guardado en el período)
+  const ingresoQuincenal = Math.round((currentIncome?.amount ?? 0) / 2)
+  const totalPagado      = (payments ?? []).reduce((sum, p) => sum + p.amount, 0)
+  const restante         = ingresoQuincenal - totalPagado
 
   return (
     <div className="space-y-4 max-w-2xl mx-auto">
@@ -238,16 +213,12 @@ export default async function DashboardPage() {
 
       {/* Tarjetas de resumen */}
       <div className="grid grid-cols-2 gap-3">
-        <SummaryCard label="Ingreso quincenal" value={formatMXN(summary?.income ?? 0)} color="blue" />
-        <SummaryCard
-          label="Pagado"
-          value={formatMXN((summary?.total_fijos_pagado ?? 0) + (summary?.total_extra_pagado ?? 0))}
-          color="orange"
-        />
+        <SummaryCard label="Ingreso quincenal" value={formatMXN(ingresoQuincenal)} color="blue" />
+        <SummaryCard label="Pagado" value={formatMXN(totalPagado)} color="orange" />
         <SummaryCard
           label="Restante"
-          value={formatMXN(summary?.restante_fijos ?? 0)}
-          color={(summary?.restante_fijos ?? 0) < 0 ? 'red' : 'green'}
+          value={formatMXN(restante)}
+          color={restante < 0 ? 'red' : 'green'}
         />
         <SummaryCard label="MSI/mes" value={formatMXN(totalMSI)} color="purple" />
       </div>
@@ -263,54 +234,42 @@ export default async function DashboardPage() {
 
       {/* Próxima quincena — agrupado por tarjeta */}
       <div className="card p-4 space-y-3">
-        <h2 className="font-semibold text-gray-700 text-sm flex items-center gap-2">
-          Próxima quincena
-          <span className="font-normal text-gray-400 text-xs">{nextLabel}</span>
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold text-gray-700 text-sm">Próxima quincena</h2>
+          <div className="flex items-center gap-1">
+            {periodOffset > 0 && (
+              <a href={`?p=${periodOffset - 1}`}
+                className="text-xs px-1.5 py-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+                ‹
+              </a>
+            )}
+            <span className="font-normal text-gray-500 text-xs">{nextLabel}</span>
+            <a href={`?p=${periodOffset + 1}`}
+              className="text-xs px-1.5 py-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+              ›
+            </a>
+          </div>
           {nextItems.length > 0 && (
             <span className="ml-auto text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
               {nextItems.length}
             </span>
           )}
-        </h2>
+        </div>
 
         {nextItems.length === 0 ? (
           <p className="text-sm text-gray-400">Sin pagos programados para la próxima quincena.</p>
         ) : (
           <>
-            {/* Grupos por tarjeta */}
-            {cardGroups.map(group => {
-              const groupTotal = group.items.reduce((s, i) => s + i.amount, 0)
-              return (
-                <div key={group.cardId} className="border border-gray-100 rounded-xl overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2 bg-gray-50">
-                    <span className="text-xs font-semibold text-gray-600">{group.cardName}</span>
-                    <PayCardGroupButton
-                      periodId={period?.id ?? ''}
-                      cardName={group.cardName}
-                      items={group.items}
-                      totalAmount={groupTotal}
-                    />
-                  </div>
-                  <div className="divide-y divide-gray-50 px-3">
-                    {group.items.map(item => (
-                      <div key={item.key} className="flex items-center justify-between py-2 gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm text-gray-800 truncate">{item.concept}</p>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                            item.type === 'fijo' ? 'bg-blue-50 text-blue-600' :
-                            item.type === 'msi'  ? 'bg-purple-50 text-purple-600' :
-                            'bg-orange-50 text-orange-600'
-                          }`}>
-                            {item.type === 'fijo' ? 'Fijo' : item.type === 'msi' ? 'MSI' : 'Programado'}
-                          </span>
-                        </div>
-                        <span className="text-sm font-semibold text-gray-700 shrink-0">{formatMXN(item.amount)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
+            {/* Grupos por tarjeta — expandibles */}
+            {cardGroups.map(group => (
+              <CollapsibleCardGroup
+                key={group.cardId}
+                cardId={group.cardId}
+                cardName={group.cardName}
+                items={group.items}
+                periodId={period?.id ?? ''}
+              />
+            ))}
 
             {/* Ítems sin tarjeta — individuales */}
             {noCardItems.length > 0 && (
@@ -352,6 +311,9 @@ export default async function DashboardPage() {
                           type={item.type as 'fijo' | 'msi' | 'programado'}
                           planId={item.planId}
                           scheduledId={item.scheduledId}
+                          recurringExpenseId={item.recurringExpenseId}
+                          intervalType={item.intervalType as any}
+                          currentNextPaymentDate={item.currentNextPaymentDate}
                         />
                       )}
                     </div>

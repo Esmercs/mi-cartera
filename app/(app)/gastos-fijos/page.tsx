@@ -21,12 +21,12 @@ export default async function GastosFijosPage() {
   const isLalo = profile?.display_name?.toLowerCase() === 'lalo'
   const myOwnership = isLalo ? 'lalo' : 'ale'
 
-  // Gastos con split calculado (vista SQL)
-  const { data: allExpenses } = await supabase
-    .from('recurring_expenses_split')
-    .select('*')
-    .eq('is_active', true)
-    .order('next_payment_date', { ascending: true }) as { data: RecurringExpenseSplit[] | null }
+  // Gastos con split calculado (vista SQL) + tarjetas en paralelo
+  const [{ data: allExpenses }, { data: cards }] = await Promise.all([
+    supabase.from('recurring_expenses_split').select('*').eq('is_active', true).order('next_payment_date', { ascending: true }) as Promise<{ data: RecurringExpenseSplit[] | null }>,
+    supabase.from('cards').select('id, name').eq('is_active', true),
+  ])
+  const cardMap = new Map((cards ?? []).map(c => [c.id, c.name]))
 
   // Split vigente via SECURITY DEFINER function (bypasses RLS)
   const { data: splitRow } = await supabase.rpc('get_split_percentages').single() as
@@ -96,7 +96,7 @@ export default async function GastosFijosPage() {
             {profile?.display_name}
           </span>
         </h2>
-        <ExpenseTable expenses={personal} showSplit={false} isLalo={isLalo} />
+        <ExpenseTable expenses={personal} showSplit={false} isLalo={isLalo} cardMap={cardMap} />
       </section>
 
       {/* Gastos compartidos */}
@@ -108,7 +108,7 @@ export default async function GastosFijosPage() {
             {formatMXN(shared.reduce((s, e) => s + e.total_amount, 0))}/mes
           </span>
         </h2>
-        <ExpenseTable expenses={shared} showSplit isLalo={isLalo} />
+        <ExpenseTable expenses={shared} showSplit isLalo={isLalo} cardMap={cardMap} />
       </section>
     </div>
   )
@@ -118,10 +118,12 @@ function ExpenseTable({
   expenses,
   showSplit,
   isLalo,
+  cardMap,
 }: {
   expenses: RecurringExpenseSplit[]
   showSplit: boolean
   isLalo: boolean
+  cardMap: Map<string, string>
 }) {
   if (!expenses.length) {
     return <p className="text-sm text-gray-400">Sin gastos registrados.</p>
@@ -137,6 +139,9 @@ function ExpenseTable({
               <p className="text-sm font-medium text-gray-800 truncate">{e.concept}</p>
               <p className="text-xs text-gray-400">
                 {intervalLabel(e.interval_type)} · {e.payment_day === 0 ? '15 y 30' : e.payment_day ? `Día ${e.payment_day}` : '—'}
+                {e.card_id && cardMap.get(e.card_id) && (
+                  <span className="ml-1 text-brand-600">· {cardMap.get(e.card_id)}</span>
+                )}
               </p>
               {showSplit && (
                 <p className="text-xs mt-0.5">
@@ -154,6 +159,8 @@ function ExpenseTable({
                 totalAmount={e.total_amount}
                 intervalType={e.interval_type}
                 paymentDay={e.payment_day ?? 15}
+                nextPaymentDate={e.next_payment_date}
+                cardId={e.card_id}
               />
               <DeleteExpenseButton id={e.id} />
             </div>
@@ -176,6 +183,7 @@ function ExpenseTable({
               )}
               <th className="pb-2 font-medium">Intervalo</th>
               <th className="pb-2 font-medium">Día de pago</th>
+              <th className="pb-2 font-medium">Tarjeta</th>
               <th className="pb-2"></th>
             </tr>
           </thead>
@@ -194,6 +202,9 @@ function ExpenseTable({
                 <td className="py-2.5 text-gray-500">
                   {e.payment_day === 0 ? '15 y 30' : e.payment_day ? `Día ${e.payment_day}` : '—'}
                 </td>
+                <td className="py-2.5 text-xs text-brand-600">
+                  {e.card_id ? (cardMap.get(e.card_id) ?? '—') : '—'}
+                </td>
                 <td className="py-2.5">
                   <div className="flex items-center gap-1">
                     <EditExpenseButton
@@ -202,6 +213,7 @@ function ExpenseTable({
                       totalAmount={e.total_amount}
                       intervalType={e.interval_type}
                       paymentDay={e.payment_day ?? 15}
+                      cardId={e.card_id}
                     />
                     <DeleteExpenseButton id={e.id} />
                   </div>

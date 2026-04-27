@@ -15,16 +15,20 @@ const intervals: { value: IntervalType; label: string }[] = [
   { value: 'anual',      label: 'Anual' },
 ]
 
+const DATE_BASED: IntervalType[] = ['bimestral', 'trimestral', 'c/15 dias', 'c/21 dias', 'anual']
+
 interface Props {
   id: string
   concept: string
   totalAmount: number
   intervalType: IntervalType
-  paymentDay: 15 | 30
+  paymentDay: 0 | 15 | 30
+  nextPaymentDate?: string | null
+  cardId?: string | null
 }
 
 export default function EditExpenseButton({
-  id, concept, totalAmount, intervalType, paymentDay,
+  id, concept, totalAmount, intervalType, paymentDay, nextPaymentDate, cardId,
 }: Props) {
   const router = useRouter()
   const supabase = createClient()
@@ -34,8 +38,29 @@ export default function EditExpenseButton({
     total_amount: totalAmount.toString(),
     interval_type: intervalType,
     payment_day: (paymentDay ?? 15).toString(),
+    next_payment_date: nextPaymentDate ?? '',
+    card_id: cardId ?? '',
   })
+  const [cards, setCards] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const isDateBased = DATE_BASED.includes(form.interval_type as IntervalType)
+
+  async function openModal() {
+    setForm({
+      concept,
+      total_amount: totalAmount.toString(),
+      interval_type: intervalType,
+      payment_day: (paymentDay ?? 15).toString(),
+      next_payment_date: nextPaymentDate ?? '',
+      card_id: cardId ?? '',
+    })
+    setError(null)
+    const { data } = await supabase.from('cards').select('id, name').eq('is_active', true).order('name')
+    setCards(data ?? [])
+    setOpen(true)
+  }
 
   function set(field: string, value: string) {
     setForm(prev => {
@@ -49,32 +74,31 @@ export default function EditExpenseButton({
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    await supabase
+    setError(null)
+    const { error: updateError } = await supabase
       .from('recurring_expenses')
       .update({
         concept: form.concept,
         total_amount: parseFloat(form.total_amount),
         interval_type: form.interval_type,
         payment_day: parseInt(form.payment_day) as 0 | 15 | 30,
+        next_payment_date: isDateBased ? (form.next_payment_date || null) : null,
+        card_id: form.card_id || null,
       })
       .eq('id', id)
-    setOpen(false)
     setLoading(false)
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
+    setOpen(false)
     router.refresh()
   }
 
   return (
     <>
       <button
-        onClick={() => {
-          setForm({
-            concept,
-            total_amount: totalAmount.toString(),
-            interval_type: intervalType,
-            payment_day: (paymentDay ?? 15).toString(),
-          })
-          setOpen(true)
-        }}
+        onClick={openModal}
         className="text-gray-300 hover:text-gray-600 transition-colors"
         title="Editar gasto"
       >
@@ -106,20 +130,41 @@ export default function EditExpenseButton({
                   ))}
                 </select>
               </div>
+              {isDateBased ? (
+                <div>
+                  <label className="label">Próximo pago</label>
+                  <input className="input" type="date" value={form.next_payment_date}
+                    onChange={e => set('next_payment_date', e.target.value)} required />
+                </div>
+              ) : (
+                <div>
+                  <label className="label">Día de pago</label>
+                  <select className="input" value={form.payment_day}
+                    onChange={e => set('payment_day', e.target.value)}
+                    disabled={form.interval_type === 'quincenal'}>
+                    {form.interval_type === 'quincenal'
+                      ? <option value="0">Ambos (15 y 30)</option>
+                      : <>
+                          <option value="15">Día 15</option>
+                          <option value="30">Día 30 (fin de mes)</option>
+                        </>
+                    }
+                  </select>
+                </div>
+              )}
               <div>
-                <label className="label">Día de pago</label>
-                <select className="input" value={form.payment_day}
-                  onChange={e => set('payment_day', e.target.value)}
-                  disabled={form.interval_type === 'quincenal'}>
-                  {form.interval_type === 'quincenal'
-                    ? <option value="0">Ambos (15 y 30)</option>
-                    : <>
-                        <option value="15">Día 15</option>
-                        <option value="30">Día 30 (fin de mes)</option>
-                      </>
-                  }
+                <label className="label">Tarjeta de domiciliación</label>
+                <select className="input" value={form.card_id}
+                  onChange={e => set('card_id', e.target.value)}>
+                  <option value="">Sin tarjeta</option>
+                  {cards.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
                 </select>
               </div>
+              {error && (
+                <p className="text-xs text-red-600 bg-red-50 rounded p-2">{error}</p>
+              )}
               <div className="flex gap-2 pt-1">
                 <button type="submit" disabled={loading} className="btn-primary flex-1">
                   {loading ? 'Guardando...' : 'Guardar'}

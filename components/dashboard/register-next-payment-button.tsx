@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation'
 import { CheckCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatMXN } from '@/lib/utils/currency'
+import { nextPaymentDate } from '@/lib/utils/date-utils'
+import type { IntervalType } from '@/types/database'
 
 interface Props {
   periodId: string
@@ -13,10 +15,15 @@ interface Props {
   type: 'fijo' | 'msi' | 'programado'
   planId: string | null
   scheduledId: string | null
+  // For date-based recurring expenses (bimestral, trimestral, anual, c/21 dias, c/15 dias)
+  recurringExpenseId?: string | null
+  intervalType?: IntervalType | null
+  currentNextPaymentDate?: string | null
 }
 
 export default function RegisterNextPaymentButton({
   periodId, concept, amount, cardId, type, planId, scheduledId,
+  recurringExpenseId, intervalType, currentNextPaymentDate,
 }: Props) {
   const router = useRouter()
   const supabase = createClient()
@@ -65,6 +72,15 @@ export default function RegisterNextPaymentButton({
       }
     }
 
+    // For date-based recurring expenses: advance next_payment_date by the interval
+    if (type === 'fijo' && recurringExpenseId && intervalType && currentNextPaymentDate) {
+      const newDate = nextPaymentDate(currentNextPaymentDate, intervalType)
+      await supabase
+        .from('recurring_expenses')
+        .update({ next_payment_date: newDate })
+        .eq('id', recurringExpenseId)
+    }
+
     setOpen(false)
     setLoading(false)
     router.refresh()
@@ -89,6 +105,11 @@ export default function RegisterNextPaymentButton({
             <div>
               <h3 className="font-semibold text-gray-800">Registrar pago</h3>
               <p className="text-xs text-gray-500 mt-0.5 truncate">{concept}</p>
+              {currentNextPaymentDate && intervalType && (
+                <p className="text-xs text-blue-600 mt-1">
+                  Siguiente pago se recorrerá automáticamente
+                </p>
+              )}
             </div>
             <form onSubmit={handlePay} className="space-y-3">
               <div>

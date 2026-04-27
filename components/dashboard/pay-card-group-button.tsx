@@ -41,16 +41,26 @@ export default function PayCardGroupButton({ periodId, cardName, items, totalAmo
 
     if (isPartial) {
       // Pago parcial: registrar un solo movimiento por el monto ingresado
+      const cardId = items[0]?.cardId ?? null
       await supabase.from('period_payments').insert({
         period_id:    periodId,
         concept:      `Pago parcial ${cardName}`,
         amount:       paid,
-        card_id:      items[0]?.cardId ?? null,
+        card_id:      cardId,
         payment_type: 'fijo',
         paid_at:      new Date().toISOString(),
       })
+      // Reducir balance de la tarjeta
+      if (cardId) {
+        const { data: card } = await supabase.from('cards').select('current_balance').eq('id', cardId).single()
+        const newBalance = Math.max(0, (card?.current_balance ?? 0) - paid)
+        await supabase.from('cards').update({ current_balance: newBalance }).eq('id', cardId)
+      }
     } else {
-      // Pago completo: registrar cada ítem individualmente
+      // Pago completo: registrar cada ítem y reducir balance de tarjeta
+      // Agrupar reducción por tarjeta para hacer un solo UPDATE por card
+      const balanceReductions = new Map<string, number>()
+
       for (const item of items) {
         await supabase.from('period_payments').insert({
           period_id:    periodId,
@@ -74,14 +84,18 @@ export default function PayCardGroupButton({ periodId, cardName, items, totalAmo
             .from('scheduled_payments')
             .update({ is_paid: true, paid_at: new Date().toISOString() })
             .eq('id', item.scheduledId)
-
-          if (item.cardId) {
-            const { data: card } = await supabase
-              .from('cards').select('current_balance').eq('id', item.cardId).single()
-            const newBalance = Math.max(0, (card?.current_balance ?? 0) - item.amount)
-            await supabase.from('cards').update({ current_balance: newBalance }).eq('id', item.cardId)
-          }
         }
+
+        if (item.cardId) {
+          balanceReductions.set(item.cardId, (balanceReductions.get(item.cardId) ?? 0) + item.amount)
+        }
+      }
+
+      // Aplicar reducciones de balance agrupadas por tarjeta
+      for (const [cardId, reduction] of balanceReductions) {
+        const { data: card } = await supabase.from('cards').select('current_balance').eq('id', cardId).single()
+        const newBalance = Math.max(0, (card?.current_balance ?? 0) - reduction)
+        await supabase.from('cards').update({ current_balance: newBalance }).eq('id', cardId)
       }
     }
 

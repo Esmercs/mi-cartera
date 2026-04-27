@@ -12,38 +12,20 @@ export default async function SharedPage() {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) redirect('/login')
 
-  // Gastos compartidos con split
-  const { data: sharedExpenses } = await supabase
-    .from('recurring_expenses_split')
-    .select('*')
-    .eq('ownership', 'shared')
-    .eq('is_active', true)
-    .order('next_payment_date', { ascending: true }) as { data: RecurringExpenseSplit[] | null }
+  const [
+    { data: sharedExpenses },
+    { data: splitRow },
+    { data: funSummary },
+    { data: debts },
+  ] = await Promise.all([
+    supabase.from('recurring_expenses_split').select('*').eq('ownership', 'shared').eq('is_active', true).order('next_payment_date', { ascending: true }) as Promise<{ data: RecurringExpenseSplit[] | null }>,
+    supabase.rpc('get_split_percentages').single() as Promise<{ data: { lalo_pct: number; ale_pct: number } | null }>,
+    supabase.from('fun_budget_summary').select('*').order('period_start', { ascending: false }).limit(1).single() as Promise<{ data: FunBudgetSummary | null }>,
+    supabase.from('inter_person_debts').select('*, debtor:profiles!debtor_id(display_name, full_name), creditor:profiles!creditor_id(display_name, full_name)').eq('is_paid', false).order('created_at', { ascending: false }),
+  ])
 
-  // Split percentages via SECURITY DEFINER function (bypasses RLS)
-  const { data: splitRow } = await supabase.rpc('get_split_percentages').single() as
-    { data: { lalo_pct: number; ale_pct: number } | null }
   const laloSplit = splitRow ? { percentage: splitRow.lalo_pct } : null
   const aleSplit  = splitRow ? { percentage: splitRow.ale_pct  } : null
-
-  // Diversión actual
-  const { data: funSummary } = await supabase
-    .from('fun_budget_summary')
-    .select('*')
-    .order('period_start', { ascending: false })
-    .limit(1)
-    .single() as { data: FunBudgetSummary | null }
-
-  // Deudas entre personas (no pagadas)
-  const { data: debts } = await supabase
-    .from('inter_person_debts')
-    .select(`
-      *,
-      debtor:profiles!debtor_id(display_name, full_name),
-      creditor:profiles!creditor_id(display_name, full_name)
-    `)
-    .eq('is_paid', false)
-    .order('created_at', { ascending: false })
 
   const totalShared     = (sharedExpenses ?? []).reduce((s, e) => s + e.total_amount, 0)
   const totalLaloPart   = (sharedExpenses ?? []).reduce((s, e) => s + e.lalo_amount, 0)
@@ -107,6 +89,7 @@ export default async function SharedPage() {
                       totalAmount={e.total_amount}
                       intervalType={e.interval_type}
                       paymentDay={e.payment_day ?? 15}
+                      cardId={e.card_id}
                     />
                   </div>
                 </div>
@@ -140,6 +123,8 @@ export default async function SharedPage() {
                           totalAmount={e.total_amount}
                           intervalType={e.interval_type}
                           paymentDay={e.payment_day ?? 15}
+                          nextPaymentDate={e.next_payment_date}
+                          cardId={e.card_id}
                         />
                       </td>
                     </tr>

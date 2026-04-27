@@ -1,11 +1,9 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
-import { formatMXDate, isOverdue } from '@/lib/utils/date-utils'
 import type { InstallmentPlan } from '@/types/database'
 import AddInstallmentForm from '@/components/financiamiento/add-installment-form'
-import RegisterPaymentButton from '@/components/financiamiento/register-payment-button'
-import EditInstallmentForm from '@/components/financiamiento/edit-installment-form'
+import CollapsibleCardGroup from '@/components/financiamiento/collapsible-card-group'
 
 export default async function FinanciamientoPage() {
   const supabase = createServerClient()
@@ -58,18 +56,34 @@ export default async function FinanciamientoPage() {
         </div>
       </div>
 
-      {/* MSIs activos */}
-      <section className="card p-5 space-y-4">
+      {/* MSIs activos — agrupados por tarjeta, colapsables */}
+      <section className="card p-5 space-y-3">
         <h2 className="font-semibold text-gray-800">Activos</h2>
 
         {!active.length ? (
           <p className="text-sm text-gray-400">Sin MSI activos.</p>
         ) : (
-          <div className="space-y-3">
-            {active.map(plan => (
-              <InstallmentCard key={plan.id} plan={plan} />
-            ))}
-          </div>
+          <>
+            {(() => {
+              const groups = new Map<string, { cardName: string; plans: typeof active; total: number }>()
+              for (const plan of active) {
+                const key = plan.card_id ?? '__none__'
+                const name = plan.cards?.name ?? 'Sin tarjeta'
+                if (!groups.has(key)) groups.set(key, { cardName: name, plans: [], total: 0 })
+                const g = groups.get(key)!
+                g.plans.push(plan)
+                g.total += plan.monthly_amount
+              }
+              return Array.from(groups.values()).map(group => (
+                <CollapsibleCardGroup
+                  key={group.cardName}
+                  cardName={group.cardName}
+                  plans={group.plans}
+                  totalMonthly={group.total}
+                />
+              ))
+            })()}
+          </>
         )}
       </section>
 
@@ -96,53 +110,3 @@ export default async function FinanciamientoPage() {
   )
 }
 
-function InstallmentCard({
-  plan,
-}: {
-  plan: InstallmentPlan & { cards?: { name: string } | null }
-}) {
-  const progress = (plan.current_month / plan.total_months) * 100
-  const overdue  = isOverdue(plan.next_payment_date)
-
-  return (
-    <div className={`border rounded-xl p-4 space-y-3 ${overdue ? 'border-red-200 bg-red-50' : 'border-gray-200'}`}>
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="font-semibold text-gray-800">{plan.concept}</p>
-          <p className="text-sm text-gray-500">
-            {plan.cards?.name ?? 'Sin tarjeta'} ·
-            Mes <span className="font-medium">{plan.current_month}</span>/{plan.total_months}
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-lg font-bold text-gray-800">{formatMXN(plan.monthly_amount)}/mes</p>
-          <p className="text-xs text-gray-400">Restante: {formatMXN(plan.remaining_debt)}</p>
-        </div>
-      </div>
-
-      {/* Barra de progreso */}
-      <div>
-        <div className="flex justify-between text-xs text-gray-400 mb-1">
-          <span>Progreso</span>
-          <span>{Math.round(progress)}%</span>
-        </div>
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-brand-500 rounded-full transition-all"
-            style={{ width: `${Math.min(progress, 100)}%` }}
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between">
-        <p className={`text-sm ${overdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
-          {overdue ? '⚠️ ' : ''}Próximo pago: {formatMXDate(plan.next_payment_date)}
-        </p>
-        <div className="flex items-center gap-2">
-          <EditInstallmentForm plan={plan} />
-          <RegisterPaymentButton planId={plan.id} monthlyAmount={plan.monthly_amount} />
-        </div>
-      </div>
-    </div>
-  )
-}
