@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 import { createServerClient } from '@/lib/supabase/server'
 import type { Profile } from '@/types/database'
 import { formatMXDate } from '@/lib/utils/date-utils'
