@@ -162,6 +162,7 @@ function ExpenseTable({
                 paymentDay={e.payment_day ?? 15}
                 nextPaymentDate={e.next_payment_date}
                 cardId={e.card_id}
+                ownership={e.ownership}
               />
               <DeleteExpenseButton id={e.id} />
             </div>
@@ -215,6 +216,7 @@ function ExpenseTable({
                       intervalType={e.interval_type}
                       paymentDay={e.payment_day ?? 15}
                       cardId={e.card_id}
+                      ownership={e.ownership}
                     />
                     <DeleteExpenseButton id={e.id} />
                   </div>

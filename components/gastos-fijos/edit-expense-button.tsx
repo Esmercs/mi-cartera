@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Pencil, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import type { IntervalType } from '@/types/database'
+import type { IntervalType, Ownership } from '@/types/database'
 
 const intervals: { value: IntervalType; label: string }[] = [
   { value: 'quincenal',  label: 'Quincenal' },
@@ -25,10 +25,11 @@ interface Props {
   paymentDay: 0 | 15 | 30
   nextPaymentDate?: string | null
   cardId?: string | null
+  ownership: Ownership
 }
 
 export default function EditExpenseButton({
-  id, concept, totalAmount, intervalType, paymentDay, nextPaymentDate, cardId,
+  id, concept, totalAmount, intervalType, paymentDay, nextPaymentDate, cardId, ownership,
 }: Props) {
   const router = useRouter()
   const supabase = createClient()
@@ -36,6 +37,7 @@ export default function EditExpenseButton({
   const [form, setForm] = useState({
     concept,
     total_amount: totalAmount.toString(),
+    ownership,
     interval_type: intervalType,
     payment_day: (paymentDay ?? 15).toString(),
     next_payment_date: nextPaymentDate ?? '',
@@ -51,6 +53,7 @@ export default function EditExpenseButton({
     setForm({
       concept,
       total_amount: totalAmount.toString(),
+      ownership,
       interval_type: intervalType,
       payment_day: (paymentDay ?? 15).toString(),
       next_payment_date: nextPaymentDate ?? '',
@@ -75,11 +78,14 @@ export default function EditExpenseButton({
     e.preventDefault()
     setLoading(true)
     setError(null)
+    const { data: { user } } = await supabase.auth.getUser()
     const { error: updateError } = await supabase
       .from('recurring_expenses')
       .update({
         concept: form.concept,
         total_amount: parseFloat(form.total_amount),
+        ownership: form.ownership as Ownership,
+        owner_id: form.ownership === 'shared' ? null : user!.id,
         interval_type: form.interval_type,
         payment_day: parseInt(form.payment_day) as 0 | 15 | 30,
         next_payment_date: isDateBased ? (form.next_payment_date || null) : null,
@@ -120,6 +126,15 @@ export default function EditExpenseButton({
                 <input className="input" type="number" step="0.01" min="0"
                   value={form.total_amount}
                   onChange={e => set('total_amount', e.target.value)} required />
+              </div>
+              <div>
+                <label className="label">Dueño</label>
+                <select className="input" value={form.ownership}
+                  onChange={e => set('ownership', e.target.value)}>
+                  <option value="shared">Compartido (Los 2)</option>
+                  <option value="lalo">Lalo (personal)</option>
+                  <option value="ale">Ale (personal)</option>
+                </select>
               </div>
               <div>
                 <label className="label">Intervalo</label>
