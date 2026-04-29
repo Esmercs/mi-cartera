@@ -1,6 +1,7 @@
 'use client'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 interface Props {
@@ -31,7 +32,7 @@ export default function ApproveRejectButtons({ userId, showApproveOnly = false }
         className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700
                    disabled:opacity-50 transition-colors font-medium"
       >
-        {loading === 'approve' ? '...' : 'Aprobar'}
+        {loading === 'approve' ? <><Loader2 size={14} className="animate-spin inline mr-1" />Aprobando...</> : 'Aprobar'}
       </button>
       {!showApproveOnly && (
         <button
@@ -40,7 +41,7 @@ export default function ApproveRejectButtons({ userId, showApproveOnly = false }
           className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 text-sm rounded-lg
                      hover:bg-red-100 disabled:opacity-50 transition-colors font-medium"
         >
-          {loading === 'reject' ? '...' : 'Rechazar'}
+          {loading === 'reject' ? <><Loader2 size={14} className="animate-spin inline mr-1" />Rechazando...</> : 'Rechazar'}
         </button>
       )}
     </div>

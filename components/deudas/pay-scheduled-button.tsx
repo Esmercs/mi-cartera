@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle } from 'lucide-react'
+import { CheckCircle, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatMXN } from '@/lib/utils/currency'
 
@@ -46,8 +46,8 @@ export default function PayScheduledButton({ paymentId, concept, amount, cardId 
                  border border-green-200 rounded-lg hover:bg-green-100 transition-colors
                  disabled:opacity-50 shrink-0"
     >
-      <CheckCircle size={13} />
-      {loading ? '...' : 'Pagar'}
+      {loading ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle size={13} />}
+      {loading ? 'Pagando...' : 'Pagar'}
     </button>
   )
 }

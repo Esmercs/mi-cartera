@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle } from 'lucide-react'
+import { CheckCircle, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatMXN } from '@/lib/utils/currency'
 import { nextPaymentDate } from '@/lib/utils/date-utils'
@@ -56,6 +56,14 @@ export default function RegisterNextPaymentButton({
         amount:  paid,
         paid_at: new Date().toISOString().split('T')[0],
       })
+      // Advance next_payment_date so the plan leaves the "próxima quincena" range
+      const { data: plan } = await supabase
+        .from('installment_plans').select('next_payment_date').eq('id', planId).single()
+      if (plan?.next_payment_date) {
+        await supabase.from('installment_plans')
+          .update({ next_payment_date: nextPaymentDate(plan.next_payment_date, 'mensual') })
+          .eq('id', planId)
+      }
     }
 
     if (type === 'programado' && scheduledId) {
@@ -134,8 +142,9 @@ export default function RegisterNextPaymentButton({
                 )}
               </div>
               <div className="flex gap-2 pt-1">
-                <button type="submit" disabled={loading} className="btn-primary flex-1">
-                  {loading ? '...' : isPartial ? 'Pago parcial' : 'Pagar'}
+                <button type="submit" disabled={loading} className="btn-primary flex-1 flex items-center justify-center gap-1.5">
+                  {loading && <Loader2 size={14} className="animate-spin" />}
+                  {loading ? 'Pagando...' : isPartial ? 'Pago parcial' : 'Pagar'}
                 </button>
                 <button type="button" onClick={() => setOpen(false)} className="btn-ghost flex-1">
                   Cancelar

@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle } from 'lucide-react'
+import { CheckCircle, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatMXN } from '@/lib/utils/currency'
 
@@ -38,7 +38,7 @@ export default function RegisterPaymentButton({ planId, monthlyAmount }: Props) 
                  border border-green-200 rounded-lg hover:bg-green-100 transition-colors
                  disabled:opacity-50"
     >
-      <CheckCircle size={13} />
+      {loading ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle size={13} />}
       {loading ? 'Registrando...' : 'Registrar pago'}
     </button>
   )

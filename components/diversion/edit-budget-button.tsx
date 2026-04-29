@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil } from 'lucide-react'
+import { Pencil, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function EditBudgetButton({
@@ -52,8 +52,8 @@ export default function EditBudgetButton({
                   value={budget} onChange={e => setBudget(e.target.value)} required />
               </div>
               <div className="flex gap-2">
-                <button type="submit" disabled={loading} className="btn-primary flex-1">
-                  {loading ? 'Guardando...' : 'Guardar'}
+                <button type="submit" disabled={loading} className="btn-primary flex-1 flex items-center justify-center gap-1.5">
+                  {loading && <Loader2 size={14} className="animate-spin" />}{loading ? 'Guardando...' : 'Guardar'}
                 </button>
                 <button type="button" onClick={() => setOpen(false)} className="btn-ghost flex-1">
                   Cancelar

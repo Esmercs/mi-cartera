@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus } from 'lucide-react'
+import { Plus, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { format } from 'date-fns'
 
@@ -113,8 +113,8 @@ export default function AddScheduledPaymentForm({ defaultPeriodDate }: Props) {
                   onChange={e => set('period_date', e.target.value)} required />
               </div>
               <div className="flex gap-2 pt-1">
-                <button type="submit" disabled={loading} className="btn-primary flex-1">
-                  {loading ? 'Guardando...' : 'Guardar'}
+                <button type="submit" disabled={loading} className="btn-primary flex-1 flex items-center justify-center gap-1.5">
+                  {loading && <Loader2 size={14} className="animate-spin" />}{loading ? 'Guardando...' : 'Guardar'}
                 </button>
                 <button type="button" onClick={() => setOpen(false)} className="btn-ghost flex-1">
                   Cancelar

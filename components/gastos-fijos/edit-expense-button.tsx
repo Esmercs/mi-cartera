@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil } from 'lucide-react'
+import { Pencil, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { IntervalType } from '@/types/database'
 
@@ -166,8 +166,8 @@ export default function EditExpenseButton({
                 <p className="text-xs text-red-600 bg-red-50 rounded p-2">{error}</p>
               )}
               <div className="flex gap-2 pt-1">
-                <button type="submit" disabled={loading} className="btn-primary flex-1">
-                  {loading ? 'Guardando...' : 'Guardar'}
+                <button type="submit" disabled={loading} className="btn-primary flex-1 flex items-center justify-center gap-1.5">
+                  {loading && <Loader2 size={14} className="animate-spin" />}{loading ? 'Guardando...' : 'Guardar'}
                 </button>
                 <button type="button" onClick={() => setOpen(false)} className="btn-ghost flex-1">
                   Cancelar

@@ -12,6 +12,7 @@ import AddIncomeForm from '@/components/dashboard/add-income-form'
 import RegisterNextPaymentButton from '@/components/dashboard/register-next-payment-button'
 import CollapsibleCardGroup from '@/components/dashboard/collapsible-card-group'
 import MarkDebtPaidButton from '@/components/shared/mark-debt-paid-button'
+import PeriodNavButton from '@/components/dashboard/period-nav-button'
 
 export default async function DashboardPage({
   searchParams,
@@ -108,6 +109,11 @@ export default async function DashboardPage({
 
   const nextFijos = [...(nextFijosByDay ?? []), ...(nextFijosByDate ?? [])]
 
+  // Conceptos ya pagados en el período actual (para filtrar fijos pre-pagados)
+  const paidKeys = new Set(
+    (payments ?? []).map(p => `${p.concept}|${p.card_id ?? ''}`)
+  )
+
   // Unificar en una lista ordenada por monto descendente
   type NextItem = {
     key: string; concept: string; amount: number; card: string | null
@@ -127,7 +133,7 @@ export default async function DashboardPage({
       totalInstallments: null, paidInstallments: 0, dueDate: null,
       recurringExpenseId: null, intervalType: null, currentNextPaymentDate: null,
     })),
-    ...(nextFijos).map(e => {
+    ...(nextFijos).filter(e => !paidKeys.has(`${e.concept}|${e.card_id ?? ''}`)).map(e => {
       const isDateBased = ['bimestral', 'trimestral', 'anual', 'c/15 dias', 'c/21 dias'].includes(e.interval_type)
       const cardName = e.card_id ? (cardNameMap.get(e.card_id) ?? null) : null
       return {
@@ -239,16 +245,10 @@ export default async function DashboardPage({
           <h2 className="font-semibold text-gray-700 text-sm">Próxima quincena</h2>
           <div className="flex items-center gap-1">
             {periodOffset > 0 && (
-              <a href={`?p=${periodOffset - 1}`}
-                className="text-xs px-1.5 py-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
-                ‹
-              </a>
+              <PeriodNavButton offset={periodOffset - 1} label="‹" />
             )}
             <span className="font-normal text-gray-500 text-xs">{nextLabel}</span>
-            <a href={`?p=${periodOffset + 1}`}
-              className="text-xs px-1.5 py-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
-              ›
-            </a>
+            <PeriodNavButton offset={periodOffset + 1} label="›" />
           </div>
           {nextItems.length > 0 && (
             <span className="ml-auto text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
@@ -378,6 +378,11 @@ export default async function DashboardPage({
                     {d.paid_installments}/{d.total_installments} cuotas · {formatMXN(d.amount)}/mes
                   </p>
                 )}
+                {d.due_date && (
+                  <p className={`text-xs mt-0.5 ${isOverdue(d.due_date) ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+                    Vence {formatMXDate(d.due_date)}{isOverdue(d.due_date) ? ' · Vencido' : ''}
+                  </p>
+                )}
               </div>
               <span className="font-medium text-red-600 shrink-0 text-sm">
                 {d.total_installments
@@ -399,6 +404,11 @@ export default async function DashboardPage({
                 {d.total_installments && (
                   <p className="text-xs text-purple-500">
                     {d.paid_installments}/{d.total_installments} cuotas · {formatMXN(d.amount)}/mes
+                  </p>
+                )}
+                {d.due_date && (
+                  <p className={`text-xs mt-0.5 ${isOverdue(d.due_date) ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+                    Vence {formatMXDate(d.due_date)}{isOverdue(d.due_date) ? ' · Vencido' : ''}
                   </p>
                 )}
               </div>

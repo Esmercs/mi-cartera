@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 function addOneMonth(dateStr: string): string {
@@ -64,7 +65,7 @@ export default function MarkDebtPaidButton({
         className="text-xs px-2 py-1 bg-green-50 text-green-700 border border-green-200
                    rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50 whitespace-nowrap"
       >
-        {loading ? '...' : `Pagar cuota (${remaining} restante${remaining === 1 ? '' : 's'})`}
+        {loading ? <><Loader2 size={11} className="animate-spin inline mr-1" />Pagando...</> : `Pagar cuota (${remaining} restante${remaining === 1 ? '' : 's'})`}
       </button>
     )
   }
@@ -76,7 +77,7 @@ export default function MarkDebtPaidButton({
       className="text-xs px-2 py-1 bg-green-50 text-green-700 border border-green-200
                  rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50"
     >
-      {loading ? '...' : 'Pagado'}
+      {loading ? <><Loader2 size={11} className="animate-spin inline mr-1" />Pagando...</> : 'Pagado'}
     </button>
   )
 }

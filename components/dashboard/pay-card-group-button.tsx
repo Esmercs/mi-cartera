@@ -1,9 +1,10 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CreditCard } from 'lucide-react'
+import { CreditCard, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatMXN } from '@/lib/utils/currency'
+import { nextPaymentDate } from '@/lib/utils/date-utils'
 
 interface Item {
   concept: string
@@ -77,6 +78,14 @@ export default function PayCardGroupButton({ periodId, cardName, items, totalAmo
             amount:  item.amount,
             paid_at: new Date().toISOString().split('T')[0],
           })
+          // Advance next_payment_date so the plan leaves the "próxima quincena" range
+          const { data: plan } = await supabase
+            .from('installment_plans').select('next_payment_date').eq('id', item.planId).single()
+          if (plan?.next_payment_date) {
+            await supabase.from('installment_plans')
+              .update({ next_payment_date: nextPaymentDate(plan.next_payment_date, 'mensual') })
+              .eq('id', item.planId)
+          }
         }
 
         if (item.type === 'programado' && item.scheduledId) {
@@ -148,8 +157,9 @@ export default function PayCardGroupButton({ periodId, cardName, items, totalAmo
                 )}
               </div>
               <div className="flex gap-2 pt-1">
-                <button type="submit" disabled={loading} className="btn-primary flex-1">
-                  {loading ? '...' : isPartial ? 'Pago parcial' : 'Pagar todo'}
+                <button type="submit" disabled={loading} className="btn-primary flex-1 flex items-center justify-center gap-1.5">
+                  {loading && <Loader2 size={14} className="animate-spin" />}
+                  {loading ? 'Pagando...' : isPartial ? 'Pago parcial' : 'Pagar todo'}
                 </button>
                 <button type="button" onClick={() => setOpen(false)} className="btn-ghost flex-1">
                   Cancelar

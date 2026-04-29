@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Settings } from 'lucide-react'
+import { Settings, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatMXN } from '@/lib/utils/currency'
 
@@ -62,8 +62,8 @@ export default function AddIncomeForm({ currentAmount }: { currentAmount: number
                 />
               </div>
               <div className="flex gap-2">
-                <button type="submit" disabled={loading} className="btn-primary flex-1">
-                  {loading ? 'Guardando...' : 'Guardar'}
+                <button type="submit" disabled={loading} className="btn-primary flex-1 flex items-center justify-center gap-1.5">
+                  {loading && <Loader2 size={14} className="animate-spin" />}{loading ? 'Guardando...' : 'Guardar'}
                 </button>
                 <button type="button" onClick={() => setOpen(false)} className="btn-ghost flex-1">
                   Cancelar
