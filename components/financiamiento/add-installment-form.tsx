@@ -57,6 +57,8 @@ export default function AddInstallmentForm() {
     const totalMonths    = parseInt(form.total_months)
     const monthlyAmount  = parseFloat(form.monthly_amount)
 
+    const remainingDebt = monthlyAmount * totalMonths
+
     await supabase.from('installment_plans').insert({
       owner_id:           user!.id,
       ownership:          profile?.display_name?.toLowerCase() === 'lalo' ? 'lalo' : 'ale',
@@ -65,10 +67,18 @@ export default function AddInstallmentForm() {
       total_months:       totalMonths,
       current_month:      1,
       monthly_amount:     monthlyAmount,
-      remaining_debt:     monthlyAmount * totalMonths,
+      remaining_debt:     remainingDebt,
       next_payment_date:  form.next_payment_date || null,
       is_active:          true,
     })
+
+    if (form.card_id) {
+      const { data: card } = await supabase
+        .from('cards').select('current_balance').eq('id', form.card_id).single()
+      await supabase.from('cards')
+        .update({ current_balance: (card?.current_balance ?? 0) + remainingDebt })
+        .eq('id', form.card_id)
+    }
 
     setOpen(false)
     setLoading(false)
