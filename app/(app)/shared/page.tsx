@@ -6,6 +6,7 @@ import { formatMXDate, isOverdue } from '@/lib/utils/date-utils'
 import type { RecurringExpenseSplit, InstallmentPlan, FunBudgetSummary } from '@/types/database'
 import AddInterPersonDebtForm from '@/components/shared/add-inter-person-debt-form'
 import MarkDebtPaidButton from '@/components/shared/mark-debt-paid-button'
+import EditDebtDueDate from '@/components/shared/edit-debt-due-date'
 import EditExpenseButton from '@/components/gastos-fijos/edit-expense-button'
 
 export default async function SharedPage() {
@@ -199,9 +200,7 @@ export default async function SharedPage() {
                     </p>
                   )}
                   {debt.due_date && (
-                    <p className={`text-xs mt-0.5 ${isOverdue(debt.due_date) ? 'text-red-500' : 'text-gray-400'}`}>
-                      Vence: {formatMXDate(debt.due_date)}
-                    </p>
+                    <EditDebtDueDate debtId={debt.id} dueDate={debt.due_date} />
                   )}
                 </div>
                 <div className="flex items-center gap-3">
