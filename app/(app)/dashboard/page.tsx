@@ -27,10 +27,7 @@ export default async function DashboardPage({
 
   // Período actual
   const { start, end, label: periodLabel } = getCurrentPeriodDates()
-  const periodDateStr  = format(end, 'yyyy-MM-dd')
-  const periodStartStr = format(start, 'yyyy-MM-dd')
-  // State A ends on lastDay-1 (≠14); State B ends on 14
-  const currentPayDay: 15 | 30 = end.getDate() === 14 ? 30 : 15
+  const periodDateStr = format(end, 'yyyy-MM-dd')
 
   // Buscar o crear la quincena actual
   let { data: period } = await supabase
@@ -103,15 +100,10 @@ export default async function DashboardPage({
   const myOwnership = isLalo ? 'lalo' : 'ale'
 
   // Grupo 2: gastos fijos + tarjetas (dependen de myOwnership) en paralelo
-  const [
-    { data: nextFijosByDay }, { data: nextFijosByDate }, { data: allCards },
-    { data: currentFijosByDay }, { data: currentFijosByDate },
-  ] = await Promise.all([
+  const [{ data: nextFijosByDay }, { data: nextFijosByDate }, { data: allCards }] = await Promise.all([
     supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']).or(`payment_day.eq.${nextPayDay},payment_day.eq.0,payment_day.is.null`).in('interval_type', ['quincenal', 'mensual']) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']).in('interval_type', ['bimestral', 'trimestral', 'anual', 'c/15 dias', 'c/21 dias']).gte('next_payment_date', nextStartStr).lte('next_payment_date', nextPeriodStr) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.from('cards').select('id, name').eq('is_active', true),
-    supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']).or(`payment_day.eq.${currentPayDay},payment_day.eq.0,payment_day.is.null`).in('interval_type', ['quincenal', 'mensual']) as Promise<{ data: RecurringExpenseSplit[] | null }>,
-    supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']).in('interval_type', ['bimestral', 'trimestral', 'anual', 'c/15 dias', 'c/21 dias']).gte('next_payment_date', periodStartStr).lte('next_payment_date', periodDateStr) as Promise<{ data: RecurringExpenseSplit[] | null }>,
   ])
   const cardNameMap = new Map((allCards ?? []).map(c => [c.id, c.name]))
 
@@ -201,18 +193,12 @@ export default async function DashboardPage({
   const totalToCollect  = (debtsToCollect ?? []).reduce((sum, d) => sum + debtPending(d), 0)
 
   // Resumen calculado desde el ingreso vigente (no el guardado en el período)
-  const ingresoQuincenal = Math.round((currentIncome?.amount ?? 0) / 2)
-  const totalPagado      = (payments ?? []).reduce((sum, p) => sum + p.amount, 0)
-
-  // Gastos estimados de esta quincena (fijos recurrentes del período actual)
-  const currentFijos = [...(currentFijosByDay ?? []), ...(currentFijosByDate ?? [])]
-  const totalGastosEstimados = currentFijos.reduce((sum, e) => {
-    const amount = e.ownership === 'shared' ? (isLalo ? e.lalo_amount : e.ale_amount) : e.total_amount
-    return sum + amount
-  }, 0)
-  // Restante proyectado: usa el mayor entre lo ya pagado y los gastos estimados
-  const totalGastos = Math.max(totalPagado, totalGastosEstimados)
-  const restante    = ingresoQuincenal - totalGastos
+  const ingresoQuincenal     = Math.round((currentIncome?.amount ?? 0) / 2)
+  const totalPagado          = (payments ?? []).reduce((sum, p) => sum + p.amount, 0)
+  // Proyección: total de gastos de próxima quincena (mismos items que la sección de abajo)
+  const totalProximaQuincena = nextItems.reduce((sum, item) => sum + item.amount, 0)
+  const totalGastos          = Math.max(totalPagado, totalProximaQuincena)
+  const restante             = ingresoQuincenal - totalGastos
 
   return (
     <div className="space-y-4 max-w-2xl mx-auto">
@@ -243,7 +229,7 @@ export default async function DashboardPage({
           label="Restante"
           value={formatMXN(restante)}
           color={restante < 0 ? 'red' : 'green'}
-          subtitle={totalGastosEstimados > 0 ? `después de ${formatMXN(totalGastosEstimados)} en fijos` : undefined}
+          subtitle={totalProximaQuincena > 0 ? `después de ${formatMXN(totalProximaQuincena)} en gastos` : undefined}
         />
         <SummaryCard label="MSI/mes" value={formatMXN(totalMSI)} color="purple" />
       </div>
