@@ -77,7 +77,7 @@ export default function MarkDebtPaidButton({
       className="text-xs px-2 py-1 bg-green-50 text-green-700 border border-green-200
                  rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50"
     >
-      {loading ? <><Loader2 size={11} className="animate-spin inline mr-1" />Pagando...</> : 'Pagado'}
+      {loading ? <><Loader2 size={11} className="animate-spin inline mr-1" />Pagando...</> : 'Marcar pagada'}
     </button>
   )
 }
