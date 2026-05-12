@@ -8,9 +8,10 @@ import { formatMXN } from '@/lib/utils/currency'
 interface Props {
   planId: string
   monthlyAmount: number
+  cardId: string | null
 }
 
-export default function RegisterPaymentButton({ planId, monthlyAmount }: Props) {
+export default function RegisterPaymentButton({ planId, monthlyAmount, cardId }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
@@ -25,6 +26,13 @@ export default function RegisterPaymentButton({ planId, monthlyAmount }: Props) 
       amount:  monthlyAmount,
       paid_at: new Date().toISOString().split('T')[0],
     })
+
+    if (cardId) {
+      const { data: card } = await supabase
+        .from('cards').select('current_balance').eq('id', cardId).single()
+      const newBalance = Math.max(0, (card?.current_balance ?? 0) - monthlyAmount)
+      await supabase.from('cards').update({ current_balance: newBalance }).eq('id', cardId)
+    }
 
     setLoading(false)
     router.refresh()

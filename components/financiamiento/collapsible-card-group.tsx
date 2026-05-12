@@ -48,7 +48,7 @@ function InstallmentCard({ plan }: { plan: Plan }) {
         </p>
         <div className="flex items-center gap-2">
           <EditInstallmentForm plan={plan} />
-          <RegisterPaymentButton planId={plan.id} monthlyAmount={plan.monthly_amount} />
+          <RegisterPaymentButton planId={plan.id} monthlyAmount={plan.monthly_amount} cardId={plan.card_id ?? null} />
         </div>
       </div>
     </div>
