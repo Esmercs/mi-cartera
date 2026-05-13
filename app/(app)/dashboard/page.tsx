@@ -200,15 +200,22 @@ export default async function DashboardPage({
   const totalGastos          = Math.max(totalPagado, totalProximaQuincena)
   const restante             = ingresoQuincenal - totalGastos
 
-  // Deudas ordenadas por fecha de vencimiento (más próxima primero, sin fecha al final)
+  // Deudas: solo las vencidas o que vencen en la próxima quincena, ordenadas por fecha
   const sortByDueDate = (a: InterPersonDebt, b: InterPersonDebt) => {
     if (!a.due_date && !b.due_date) return 0
     if (!a.due_date) return 1
     if (!b.due_date) return -1
     return a.due_date.localeCompare(b.due_date)
   }
-  const sortedDebtsOwed      = [...(debtsOwed      ?? [])].sort(sortByDueDate)
-  const sortedDebtsToCollect = [...(debtsToCollect ?? [])].sort(sortByDueDate)
+  const visibleDebtsOwed = [...(debtsOwed ?? [])]
+    .filter(d => !d.due_date || d.due_date <= nextPeriodStr)
+    .sort(sortByDueDate)
+  const hiddenDebtsOwed = (debtsOwed ?? []).length - visibleDebtsOwed.length
+
+  const visibleDebtsToCollect = [...(debtsToCollect ?? [])]
+    .filter(d => !d.due_date || d.due_date <= nextPeriodStr)
+    .sort(sortByDueDate)
+  const hiddenDebtsToCollect = (debtsToCollect ?? []).length - visibleDebtsToCollect.length
 
   const paidPct = ingresoQuincenal > 0
     ? Math.min(100, Math.round((totalPagado / ingresoQuincenal) * 100))
@@ -422,18 +429,18 @@ export default async function DashboardPage({
         </div>
       )}
 
-      {/* ── Deudas — 2 columnas ── */}
-      {((debtsOwed?.length ?? 0) > 0 || (debtsToCollect?.length ?? 0) > 0) && (
+      {/* ── Deudas — 2 columnas, filtradas por próxima quincena ── */}
+      {(visibleDebtsOwed.length > 0 || visibleDebtsToCollect.length > 0) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Lo que debo */}
-          {(debtsOwed?.length ?? 0) > 0 && (
+          {visibleDebtsOwed.length > 0 && (
             <div className="card p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-red-600">Lo que debo</h2>
                 <span className="text-sm font-bold text-red-600">{formatMXN(totalOwed)}</span>
               </div>
               <div className="space-y-0">
-                {sortedDebtsOwed.map(d => (
+                {visibleDebtsOwed.map(d => (
                   <div key={d.id} className="py-2.5 border-b last:border-0">
                     <div className="flex justify-between items-start gap-2">
                       <p className="text-sm text-gray-800 font-medium truncate">{d.concept}</p>
@@ -456,18 +463,23 @@ export default async function DashboardPage({
                   </div>
                 ))}
               </div>
+              {hiddenDebtsOwed > 0 && (
+                <a href="/compartido" className="block text-xs text-gray-400 hover:text-gray-600 text-center pt-1">
+                  + {hiddenDebtsOwed} más con fecha posterior →
+                </a>
+              )}
             </div>
           )}
 
           {/* Me deben */}
-          {(debtsToCollect?.length ?? 0) > 0 && (
+          {visibleDebtsToCollect.length > 0 && (
             <div className="card p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-green-700">Me deben</h2>
                 <span className="text-sm font-bold text-green-700">{formatMXN(totalToCollect)}</span>
               </div>
               <div className="space-y-0">
-                {sortedDebtsToCollect.map(d => (
+                {visibleDebtsToCollect.map(d => (
                   <div key={d.id} className="py-2.5 border-b last:border-0">
                     <div className="flex justify-between items-start gap-2">
                       <div className="min-w-0">
@@ -493,6 +505,11 @@ export default async function DashboardPage({
                   </div>
                 ))}
               </div>
+              {hiddenDebtsToCollect > 0 && (
+                <a href="/compartido" className="block text-xs text-gray-400 hover:text-gray-600 text-center pt-1">
+                  + {hiddenDebtsToCollect} más con fecha posterior →
+                </a>
+              )}
             </div>
           )}
         </div>
