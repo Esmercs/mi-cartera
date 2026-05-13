@@ -13,6 +13,8 @@ import RegisterNextPaymentButton from '@/components/dashboard/register-next-paym
 import CollapsibleCardGroup from '@/components/dashboard/collapsible-card-group'
 import MarkDebtPaidButton from '@/components/shared/mark-debt-paid-button'
 import PeriodNavButton from '@/components/dashboard/period-nav-button'
+import AddProjectionForm from '@/components/dashboard/add-projection-form'
+import MarkProjectionPaidButton from '@/components/dashboard/mark-projection-paid-button'
 
 export default async function DashboardPage({
   searchParams,
@@ -71,6 +73,8 @@ export default async function DashboardPage({
   const nextPeriodStr = format(nextEnd, 'yyyy-MM-dd')
   const nextStartStr  = format(nextStart, 'yyyy-MM-dd')
 
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
+
   // Grupo 1: queries independientes en paralelo
   const [
     { data: summary },
@@ -83,6 +87,7 @@ export default async function DashboardPage({
     { data: nextScheduled },
     { data: nextMSI },
     { data: nextDebts },
+    { data: allProjections },
   ] = await Promise.all([
     supabase.from('period_summary').select('*').eq('id', period?.id).single() as Promise<{ data: PeriodSummary | null }>,
     supabase.from('period_payments').select('*, cards(name)').eq('period_id', period?.id ?? '').order('paid_at', { ascending: false }),
@@ -94,6 +99,7 @@ export default async function DashboardPage({
     supabase.from('scheduled_payments').select('*, cards(name)').eq('owner_id', userId).eq('period_date', nextPeriodStr).eq('is_paid', false).order('payment_type', { ascending: true }) as Promise<{ data: ScheduledPayment[] | null }>,
     supabase.from('installment_plans').select('*, cards(name)').eq('owner_id', userId).eq('is_active', true).gte('next_payment_date', nextStartStr).lte('next_payment_date', nextPeriodStr) as Promise<{ data: InstallmentPlan[] | null }>,
     supabase.from('inter_person_debts').select('*, creditor:profiles!creditor_id(display_name)').eq('debtor_id', userId).eq('is_paid', false).gte('due_date', nextStartStr).lte('due_date', nextPeriodStr) as Promise<{ data: any[] | null }>,
+    (supabase.from('projections') as any).select('*, cards(name)').eq('owner_id', userId).eq('is_paid', false).gte('projected_date', todayStr).order('projected_date', { ascending: true }),
   ])
 
   const isLalo      = (profile as any)?.display_name?.toLowerCase() === 'lalo'
@@ -195,8 +201,17 @@ export default async function DashboardPage({
   // Resumen calculado desde el ingreso vigente (no el guardado en el período)
   const ingresoQuincenal     = Math.round((currentIncome?.amount ?? 0) / 2)
   const totalPagado          = (payments ?? []).reduce((sum, p) => sum + p.amount, 0)
-  // Proyección: total de gastos de próxima quincena (mismos items que la sección de abajo)
-  const totalProximaQuincena = nextItems.reduce((sum, item) => sum + item.amount, 0)
+
+  // Proyecciones en la próxima quincena (se suman al estimado)
+  const proximaProjections   = (allProjections ?? []).filter(
+    (p: any) => p.projected_date >= nextStartStr && p.projected_date <= nextPeriodStr
+  )
+  const futureProjections    = (allProjections ?? []).filter(
+    (p: any) => p.projected_date > nextPeriodStr
+  )
+  const totalProxProjections = proximaProjections.reduce((sum: number, p: any) => sum + p.amount, 0)
+
+  const totalProximaQuincena = nextItems.reduce((sum, item) => sum + item.amount, 0) + totalProxProjections
   const totalGastos          = Math.max(totalPagado, totalProximaQuincena)
   const restante             = ingresoQuincenal - totalGastos
 
@@ -398,6 +413,94 @@ export default async function DashboardPage({
           </div>
         </>
       )}
+
+      {/* ── Proyecciones ── */}
+      <div className="card p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-gray-800 text-sm">Proyecciones</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Gastos futuros planificados</p>
+          </div>
+          <AddProjectionForm />
+        </div>
+
+        {(allProjections ?? []).length === 0 ? (
+          <p className="text-sm text-gray-400">Sin proyecciones. Agrega gastos futuros planeados.</p>
+        ) : (
+          <>
+            {/* Proyecciones de próxima quincena */}
+            {proximaProjections.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                  Próxima quincena · {nextLabel}
+                </p>
+                <div className="space-y-0">
+                  {proximaProjections.map((p: any) => (
+                    <div key={p.id} className="flex items-center justify-between py-2.5 border-b last:border-0 gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-800 truncate">{p.concept}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-gray-400">{formatMXDate(p.projected_date)}</span>
+                          {p.cards?.name && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded font-medium">
+                              {p.cards.name}
+                            </span>
+                          )}
+                        </div>
+                        {p.notes && <p className="text-xs text-gray-400 mt-0.5 italic">{p.notes}</p>}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-sm font-semibold text-gray-800">{formatMXN(p.amount)}</span>
+                        <MarkProjectionPaidButton
+                          projectionId={p.id}
+                          periodId={period?.id ?? ''}
+                          concept={p.concept}
+                          amount={p.amount}
+                          cardId={p.card_id ?? null}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="pt-2 border-t border-gray-100 flex justify-between text-xs font-semibold text-gray-500 mt-1">
+                  <span>Subtotal proyecciones</span>
+                  <span>{formatMXN(totalProxProjections)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Proyecciones más adelante */}
+            {futureProjections.length > 0 && (
+              <div>
+                {proximaProjections.length > 0 && (
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 pt-1">
+                    Más adelante
+                  </p>
+                )}
+                <div className="space-y-0">
+                  {futureProjections.map((p: any) => (
+                    <div key={p.id} className="flex items-center justify-between py-2.5 border-b last:border-0 gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-800 truncate">{p.concept}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-gray-400">{formatMXDate(p.projected_date)}</span>
+                          {p.cards?.name && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded font-medium">
+                              {p.cards.name}
+                            </span>
+                          )}
+                        </div>
+                        {p.notes && <p className="text-xs text-gray-400 mt-0.5 italic">{p.notes}</p>}
+                      </div>
+                      <span className="text-sm font-semibold text-gray-700 shrink-0">{formatMXN(p.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {/* ── MSIs activos ── */}
       {(installments?.length ?? 0) > 0 && (
