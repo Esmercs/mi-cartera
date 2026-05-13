@@ -23,7 +23,7 @@ export default async function SharedPage() {
     supabase.from('recurring_expenses_split').select('*').eq('ownership', 'shared').eq('is_active', true).order('next_payment_date', { ascending: true }) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.rpc('get_split_percentages').single() as Promise<{ data: { lalo_pct: number; ale_pct: number } | null }>,
     supabase.from('fun_budget_summary').select('*').order('period_start', { ascending: false }).limit(1).single() as Promise<{ data: FunBudgetSummary | null }>,
-    supabase.from('inter_person_debts').select('*, debtor:profiles!debtor_id(display_name, full_name), creditor:profiles!creditor_id(display_name, full_name)').eq('is_paid', false).order('created_at', { ascending: false }),
+    supabase.from('inter_person_debts').select('*, debtor:profiles!debtor_id(display_name, full_name), creditor:profiles!creditor_id(display_name, full_name), cards(name)').eq('is_paid', false).order('created_at', { ascending: false }),
   ])
 
   const laloSplit = splitRow ? { percentage: splitRow.lalo_pct } : null
@@ -196,6 +196,8 @@ export default async function SharedPage() {
                       dueDate={debt.due_date ?? null}
                       totalInstallments={debt.total_installments ?? null}
                       paidInstallments={debt.paid_installments ?? 0}
+                      cardId={debt.card_id ?? null}
+                      cardName={debt.cards?.name ?? null}
                       creditorId={debt.creditor_id}
                       currentUserId={session.user.id}
                     />

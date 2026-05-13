@@ -11,6 +11,8 @@ interface Props {
   dueDate: string | null
   totalInstallments: number | null
   paidInstallments: number
+  cardId: string | null
+  cardName: string | null
   creditorId: string
   currentUserId: string
 }
@@ -18,6 +20,7 @@ interface Props {
 export default function EditDebtDialog({
   debtId, concept, amount, dueDate,
   totalInstallments, paidInstallments,
+  cardId, cardName,
   creditorId, currentUserId,
 }: Props) {
   const router = useRouter()
@@ -25,21 +28,26 @@ export default function EditDebtDialog({
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [cards, setCards] = useState<{ id: string; name: string }[]>([])
   const [form, setForm] = useState({
     concept,
     amount: String(amount),
     due_date: dueDate ?? '',
     total_installments: totalInstallments ? String(totalInstallments) : '',
+    card_id: cardId ?? '',
   })
 
   const canEdit = creditorId === currentUserId
 
-  function openDialog() {
+  async function openDialog() {
+    const { data } = await supabase.from('cards').select('id, name').eq('is_active', true).order('name')
+    setCards(data ?? [])
     setForm({
       concept,
       amount: String(amount),
       due_date: dueDate ?? '',
       total_installments: totalInstallments ? String(totalInstallments) : '',
+      card_id: cardId ?? '',
     })
     setConfirmDelete(false)
     setOpen(true)
@@ -53,6 +61,7 @@ export default function EditDebtDialog({
       amount:             parseFloat(form.amount),
       due_date:           form.due_date || null,
       total_installments: form.total_installments ? parseInt(form.total_installments) : null,
+      card_id:            form.card_id || null,
     }).eq('id', debtId)
     setLoading(false)
     setOpen(false)
@@ -166,6 +175,22 @@ export default function EditDebtDialog({
                         {paidInstallments} pagadas · {remainingInstallments} restantes
                       </p>
                     )}
+                  </div>
+                )}
+
+                {cards.length > 0 && (
+                  <div>
+                    <label className="label">Tarjeta (opcional)</label>
+                    <select
+                      className="input"
+                      value={form.card_id}
+                      onChange={e => setForm(p => ({ ...p, card_id: e.target.value }))}
+                    >
+                      <option value="">Sin tarjeta</option>
+                      {cards.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
                   </div>
                 )}
 

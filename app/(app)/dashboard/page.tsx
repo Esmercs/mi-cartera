@@ -10,7 +10,7 @@ import AddPeriodPaymentForm from '@/components/dashboard/add-period-payment-form
 import PeriodPaymentsList from '@/components/dashboard/period-payments-list'
 import AddIncomeForm from '@/components/dashboard/add-income-form'
 import RegisterNextPaymentButton from '@/components/dashboard/register-next-payment-button'
-import CollapsibleCardGroup from '@/components/dashboard/collapsible-card-group'
+import CollapsibleCardGroup, { type LinkedDebt } from '@/components/dashboard/collapsible-card-group'
 import MarkDebtPaidButton from '@/components/shared/mark-debt-paid-button'
 import PeriodNavButton from '@/components/dashboard/period-nav-button'
 
@@ -91,7 +91,7 @@ export default async function DashboardPage({
     supabase.from('period_payments').select('*, cards(name)').eq('period_id', period?.id ?? '').order('paid_at', { ascending: false }),
     supabase.from('installment_plans').select('*, cards(name)').eq('owner_id', userId).eq('is_active', true).order('next_payment_date', { ascending: true }) as Promise<{ data: InstallmentPlan[] | null }>,
     supabase.from('inter_person_debts').select('*, creditor:profiles!creditor_id(display_name, full_name)').eq('debtor_id', userId).eq('is_paid', false) as Promise<{ data: InterPersonDebt[] | null }>,
-    supabase.from('inter_person_debts').select('*, debtor:profiles!debtor_id(display_name, full_name)').eq('creditor_id', userId).eq('is_paid', false) as Promise<{ data: InterPersonDebt[] | null }>,
+    supabase.from('inter_person_debts').select('*, debtor:profiles!debtor_id(display_name, full_name), cards(name)').eq('creditor_id', userId).eq('is_paid', false) as Promise<{ data: InterPersonDebt[] | null }>,
     supabase.from('profiles').select('display_name').eq('id', userId).single(),
     supabase.from('income_config').select('amount, valid_from').eq('owner_id', userId).order('valid_from', { ascending: false }).limit(1).single() as Promise<{ data: IncomeConfig | null }>,
     supabase.from('scheduled_payments').select('*, cards(name)').eq('owner_id', userId).eq('period_date', nextPeriodStr).eq('is_paid', false).order('payment_type', { ascending: true }) as Promise<{ data: ScheduledPayment[] | null }>,
@@ -195,6 +195,21 @@ export default async function DashboardPage({
     d.total_installments ? d.amount * (d.total_installments - d.paid_installments) : d.amount
   const totalOwed       = (debtsOwed      ?? []).reduce((sum, d) => sum + debtPending(d), 0)
   const totalToCollect  = (debtsToCollect ?? []).reduce((sum, d) => sum + debtPending(d), 0)
+
+  // Deudas de "me deben" agrupadas por tarjeta (para mostrar desglose en card groups)
+  const debtsByCard = new Map<string, LinkedDebt[]>()
+  for (const d of (debtsToCollect ?? [])) {
+    const cid = (d as any).card_id
+    if (!cid) continue
+    const entry: LinkedDebt = {
+      debtId:    d.id,
+      concept:   d.concept,
+      amount:    debtPending(d),
+      debtorName: (d as any).debtor?.display_name ?? 'Deudor',
+    }
+    if (!debtsByCard.has(cid)) debtsByCard.set(cid, [])
+    debtsByCard.get(cid)!.push(entry)
+  }
 
   // Resumen calculado desde el ingreso vigente (no el guardado en el período)
   const ingresoQuincenal     = Math.round((currentIncome?.amount ?? 0) / 2)
@@ -342,6 +357,7 @@ export default async function DashboardPage({
                   cardName={group.cardName}
                   items={group.items}
                   periodId={period?.id ?? ''}
+                  linkedDebts={debtsByCard.get(group.cardId)}
                 />
               ))}
               <div className="pt-2 border-t border-gray-100 flex justify-between text-xs font-semibold text-gray-500">

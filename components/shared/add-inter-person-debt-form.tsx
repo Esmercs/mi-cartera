@@ -9,6 +9,7 @@ export default function AddInterPersonDebtForm() {
   const supabase = createClient()
   const [open, setOpen] = useState(false)
   const [users, setUsers] = useState<{ id: string; display_name: string }[]>([])
+  const [cards, setCards] = useState<{ id: string; name: string }[]>([])
   const [isMeses, setIsMeses] = useState(false)
   const [form, setForm] = useState({
     debtor_id: '',
@@ -16,17 +17,19 @@ export default function AddInterPersonDebtForm() {
     amount: '',
     installments: '',
     due_date: '',
+    card_id: '',
   })
   const [loading, setLoading] = useState(false)
 
   async function openModal() {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, display_name')
-      .eq('status', 'approved')
-    setUsers(data ?? [])
+    const [{ data: profiles }, { data: cardData }] = await Promise.all([
+      supabase.from('profiles').select('id, display_name').eq('status', 'approved'),
+      supabase.from('cards').select('id, name').eq('is_active', true).order('name'),
+    ])
+    setUsers(profiles ?? [])
+    setCards(cardData ?? [])
     setIsMeses(false)
-    setForm({ debtor_id: '', concept: '', amount: '', installments: '', due_date: '' })
+    setForm({ debtor_id: '', concept: '', amount: '', installments: '', due_date: '', card_id: '' })
     setOpen(true)
   }
 
@@ -45,6 +48,7 @@ export default function AddInterPersonDebtForm() {
       total_installments: totalInstallments,
       paid_installments:  0,
       due_date:           form.due_date || null,
+      card_id:            form.card_id || null,
     })
 
     setOpen(false)
@@ -127,6 +131,18 @@ export default function AddInterPersonDebtForm() {
                 </div>
               )}
 
+              {cards.length > 0 && (
+                <div>
+                  <label className="label">Tarjeta (opcional)</label>
+                  <select className="input" value={form.card_id}
+                    onChange={e => setForm(p => ({ ...p, card_id: e.target.value }))}>
+                    <option value="">Sin tarjeta</option>
+                    {cards.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="label">
                   {isMeses ? 'Fecha primer vencimiento (opcional)' : 'Fecha límite (opcional)'}
