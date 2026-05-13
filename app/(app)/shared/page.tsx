@@ -6,7 +6,7 @@ import { formatMXDate, isOverdue } from '@/lib/utils/date-utils'
 import type { RecurringExpenseSplit, InstallmentPlan, FunBudgetSummary } from '@/types/database'
 import AddInterPersonDebtForm from '@/components/shared/add-inter-person-debt-form'
 import MarkDebtPaidButton from '@/components/shared/mark-debt-paid-button'
-import EditDebtDueDate from '@/components/shared/edit-debt-due-date'
+import EditDebtDialog from '@/components/shared/edit-debt-dialog'
 import EditExpenseButton from '@/components/gastos-fijos/edit-expense-button'
 
 export default async function SharedPage() {
@@ -186,8 +186,20 @@ export default async function SharedPage() {
                 key={debt.id}
                 className="flex items-center justify-between p-3 border rounded-xl bg-gray-50"
               >
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{debt.concept}</p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium text-gray-800">{debt.concept}</p>
+                    <EditDebtDialog
+                      debtId={debt.id}
+                      concept={debt.concept}
+                      amount={debt.amount}
+                      dueDate={debt.due_date ?? null}
+                      totalInstallments={debt.total_installments ?? null}
+                      paidInstallments={debt.paid_installments ?? 0}
+                      creditorId={debt.creditor_id}
+                      currentUserId={session.user.id}
+                    />
+                  </div>
                   <p className="text-xs text-gray-500">
                     <span className="font-medium">{debt.debtor?.display_name}</span>
                     {' '}le debe a{' '}
@@ -200,10 +212,12 @@ export default async function SharedPage() {
                     </p>
                   )}
                   {debt.due_date && (
-                    <EditDebtDueDate debtId={debt.id} dueDate={debt.due_date} />
+                    <p className={`text-xs mt-0.5 ${isOverdue(debt.due_date) ? 'text-red-500' : 'text-gray-400'}`}>
+                      Vence: {formatMXDate(debt.due_date)}
+                    </p>
                   )}
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 shrink-0">
                   <span className="font-semibold text-gray-800">
                     {debt.total_installments
                       ? formatMXN(debt.amount * (debt.total_installments - debt.paid_installments))
