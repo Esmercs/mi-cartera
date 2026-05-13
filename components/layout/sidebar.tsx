@@ -25,7 +25,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: '/dashboard',    label: 'Mi Dashboard',      icon: <LayoutDashboard size={18} /> },
   { href: '/shared',       label: 'Compartido',         icon: <Users size={18} /> },
-  { href: '/gastos-fijos', label: 'Gastos Fijos',       icon: <CalendarDays size={18} /> },
+  { href: '/gastos-fijos', label: 'Gastos',              icon: <CalendarDays size={18} /> },
   { href: '/financiamiento', label: 'Financiamiento',   icon: <CreditCard size={18} /> },
   { href: '/diversion',    label: 'Diversión',          icon: <PartyPopper size={18} /> },
   { href: '/deudas',       label: 'Deudas',             icon: <Wallet size={18} /> },

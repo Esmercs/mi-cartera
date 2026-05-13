@@ -2,31 +2,58 @@ export const dynamic = 'force-dynamic'
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
-import { intervalLabel } from '@/lib/utils/date-utils'
+import { intervalLabel, formatMXDate, getCurrentPeriodDates, getOffsetPeriodDates } from '@/lib/utils/date-utils'
+import { format } from 'date-fns'
 import type { RecurringExpenseSplit } from '@/types/database'
 import AddExpenseForm from '@/components/gastos-fijos/add-expense-form'
 import DeleteExpenseButton from '@/components/gastos-fijos/delete-expense-button'
 import EditExpenseButton from '@/components/gastos-fijos/edit-expense-button'
+import AddProjectionForm from '@/components/dashboard/add-projection-form'
+import MarkProjectionPaidButton from '@/components/dashboard/mark-projection-paid-button'
 
 export default async function GastosFijosPage() {
   const supabase = createServerClient()
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) redirect('/login')
 
+  const userId = session.user.id
+  const { end } = getCurrentPeriodDates()
+  const { start: nextStart, end: nextEnd, label: nextLabel } = getOffsetPeriodDates(0)
+  const periodDateStr  = format(end, 'yyyy-MM-dd')
+  const nextStartStr   = format(nextStart, 'yyyy-MM-dd')
+  const nextPeriodStr  = format(nextEnd, 'yyyy-MM-dd')
+  const todayStr       = format(new Date(), 'yyyy-MM-dd')
+
   const { data: profile } = await supabase
     .from('profiles')
     .select('display_name, id')
-    .eq('id', session.user.id)
+    .eq('id', userId)
     .single()
 
   const isLalo = profile?.display_name?.toLowerCase() === 'lalo'
   const myOwnership = isLalo ? 'lalo' : 'ale'
 
-  // Gastos con split calculado (vista SQL) + tarjetas en paralelo
-  const [{ data: allExpenses }, { data: cards }] = await Promise.all([
+  // Período actual para registrar pagos de proyecciones
+  let { data: period } = await supabase
+    .from('periods')
+    .select('id')
+    .eq('owner_id', userId)
+    .eq('period_date', periodDateStr)
+    .single()
+
+  // Gastos con split calculado (vista SQL) + tarjetas + proyecciones en paralelo
+  const [{ data: allExpenses }, { data: cards }, { data: allProjections }] = await Promise.all([
     supabase.from('recurring_expenses_split').select('*').eq('is_active', true).order('next_payment_date', { ascending: true }) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.from('cards').select('id, name').eq('is_active', true),
+    (supabase.from('projections') as any).select('*, cards(name)').eq('owner_id', userId).eq('is_paid', false).gte('projected_date', todayStr).order('projected_date', { ascending: true }),
   ])
+
+  const proximaProjections = (allProjections ?? []).filter(
+    (p: any) => p.projected_date >= nextStartStr && p.projected_date <= nextPeriodStr
+  )
+  const futureProjections = (allProjections ?? []).filter(
+    (p: any) => p.projected_date > nextPeriodStr
+  )
   const cardMap = new Map((cards ?? []).map(c => [c.id, c.name]))
 
   // Split vigente via SECURITY DEFINER function (bypasses RLS)
@@ -49,7 +76,7 @@ export default async function GastosFijosPage() {
       {/* Header — desktop only */}
       <div className="hidden md:flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Gastos Fijos</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Gastos</h1>
           <p className="text-gray-500 text-sm mt-0.5">
             Split vigente — Lalo:{' '}
             <span className="font-medium text-lalo">{laloSplit?.percentage?.toFixed(1) ?? '—'}%</span>
@@ -110,6 +137,88 @@ export default async function GastosFijosPage() {
           </span>
         </h2>
         <ExpenseTable expenses={shared} showSplit isLalo={isLalo} cardMap={cardMap} />
+      </section>
+
+      {/* Proyecciones */}
+      <section className="card p-4 md:p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-gray-800 text-sm">Proyecciones</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Gastos futuros planificados</p>
+          </div>
+          <AddProjectionForm />
+        </div>
+
+        {(allProjections ?? []).length === 0 ? (
+          <p className="text-sm text-gray-400">Sin proyecciones. Agrega gastos futuros planeados.</p>
+        ) : (
+          <>
+            {proximaProjections.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                  Próxima quincena · {nextLabel}
+                </p>
+                <div className="space-y-0">
+                  {proximaProjections.map((p: any) => (
+                    <div key={p.id} className="flex items-center justify-between py-2.5 border-b last:border-0 gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-800 truncate">{p.concept}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-gray-400">{formatMXDate(p.projected_date)}</span>
+                          {p.cards?.name && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded font-medium">
+                              {p.cards.name}
+                            </span>
+                          )}
+                        </div>
+                        {p.notes && <p className="text-xs text-gray-400 mt-0.5 italic">{p.notes}</p>}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-sm font-semibold text-gray-800">{formatMXN(p.amount)}</span>
+                        <MarkProjectionPaidButton
+                          projectionId={p.id}
+                          periodId={period?.id ?? ''}
+                          concept={p.concept}
+                          amount={p.amount}
+                          cardId={p.card_id ?? null}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {futureProjections.length > 0 && (
+              <div>
+                {proximaProjections.length > 0 && (
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 pt-1">
+                    Más adelante
+                  </p>
+                )}
+                <div className="space-y-0">
+                  {futureProjections.map((p: any) => (
+                    <div key={p.id} className="flex items-center justify-between py-2.5 border-b last:border-0 gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-800 truncate">{p.concept}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-gray-400">{formatMXDate(p.projected_date)}</span>
+                          {p.cards?.name && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded font-medium">
+                              {p.cards.name}
+                            </span>
+                          )}
+                        </div>
+                        {p.notes && <p className="text-xs text-gray-400 mt-0.5 italic">{p.notes}</p>}
+                      </div>
+                      <span className="text-sm font-semibold text-gray-700 shrink-0">{formatMXN(p.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </section>
     </div>
   )

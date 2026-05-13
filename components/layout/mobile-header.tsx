@@ -8,7 +8,7 @@ import type { Profile } from '@/types/database'
 const titles: Record<string, string> = {
   '/dashboard':      'Mi Dashboard',
   '/shared':         'Compartido',
-  '/gastos-fijos':   'Gastos Fijos',
+  '/gastos-fijos':   'Gastos',
   '/financiamiento': 'Financiamiento',
   '/diversion':      'Diversión',
   '/deudas':         'Deudas',

@@ -12,7 +12,7 @@ import {
 
 const navItems = [
   { href: '/dashboard',      label: 'Inicio',     icon: LayoutDashboard },
-  { href: '/gastos-fijos',   label: 'Fijos',      icon: CalendarDays },
+  { href: '/gastos-fijos',   label: 'Gastos',     icon: CalendarDays },
   { href: '/shared',         label: 'Juntos',     icon: Users },
   { href: '/financiamiento', label: 'MSI',        icon: CreditCard },
   { href: '/diversion',      label: 'Diversión',  icon: PartyPopper },
