@@ -464,7 +464,7 @@ export default async function DashboardPage({
                 ))}
               </div>
               {hiddenDebtsOwed > 0 && (
-                <a href="/compartido" className="block text-xs text-gray-400 hover:text-gray-600 text-center pt-1">
+                <a href="/shared" className="block text-xs text-gray-400 hover:text-gray-600 text-center pt-1">
                   + {hiddenDebtsOwed} más con fecha posterior →
                 </a>
               )}
@@ -506,7 +506,7 @@ export default async function DashboardPage({
                 ))}
               </div>
               {hiddenDebtsToCollect > 0 && (
-                <a href="/compartido" className="block text-xs text-gray-400 hover:text-gray-600 text-center pt-1">
+                <a href="/shared" className="block text-xs text-gray-400 hover:text-gray-600 text-center pt-1">
                   + {hiddenDebtsToCollect} más con fecha posterior →
                 </a>
               )}
