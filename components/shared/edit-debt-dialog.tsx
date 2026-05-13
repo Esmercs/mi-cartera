@@ -82,9 +82,21 @@ export default function EditDebtDialog({
       </button>
 
       {open && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="card p-5 w-full max-w-sm space-y-4">
-            <h3 className="font-semibold text-gray-800">Editar deuda</h3>
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          onClick={() => setOpen(false)}
+        >
+          <div className="card p-5 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-gray-800">Editar deuda</h3>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+              >
+                ✕
+              </button>
+            </div>
 
             {!canEdit ? (
               <p className="text-sm text-gray-500">Solo el acreedor puede editar esta deuda.</p>
