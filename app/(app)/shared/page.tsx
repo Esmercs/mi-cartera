@@ -129,7 +129,9 @@ export default async function SharedPage() {
                       <td className="py-2.5 text-xs">
                         {!e.paid_by || e.paid_by === 'each'
                           ? <span className="text-gray-400">Cada quien</span>
-                          : <span className="text-purple-600 font-medium">{e.paid_by === 'lalo' ? 'Lalo' : 'Ale'}</span>
+                          : e.paid_by === 'lalo'
+                            ? <span className="text-lalo font-medium">Lalo</span>
+                            : <span className="text-ale font-medium">Ale</span>
                         }
                       </td>
                       <td className="py-2.5">
