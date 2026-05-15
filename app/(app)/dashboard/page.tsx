@@ -583,7 +583,7 @@ export default async function DashboardPage({
           </div>
         </div>
 
-        {(payments?.length ?? 0) === 0 ? (
+        {(payments?.length ?? 0) === 0 && paidIOwe.length === 0 ? (
           <p className="text-sm text-gray-400">Sin pagos registrados esta quincena.</p>
         ) : (
           <div className="space-y-2">
@@ -599,6 +599,18 @@ export default async function DashboardPage({
             )}
             {paidOther.length > 0 && (
               <CollapsiblePaidGroup label="Otros" payments={paidOther} />
+            )}
+            {paidIOwe.length > 0 && (
+              <CollapsiblePaidGroup
+                label={`Pagos a ${otherName}`}
+                deletable={false}
+                payments={paidIOwe.map(x => ({
+                  id: x.settlement.id,
+                  concept: x.concept,
+                  amount: x.amount,
+                  payment_type: 'fijo',
+                }))}
+              />
             )}
           </div>
         )}

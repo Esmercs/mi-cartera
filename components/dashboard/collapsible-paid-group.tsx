@@ -15,16 +15,19 @@ interface PaidPayment {
 export default function CollapsiblePaidGroup({
   label,
   payments,
+  deletable = true,
 }: {
   label: string
   payments: PaidPayment[]
+  deletable?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = deletable ? createClient() : null
   const total = payments.reduce((s, p) => s + p.amount, 0)
 
   async function handleDelete(id: string) {
+    if (!supabase) return
     await supabase.from('period_payments').delete().eq('id', id)
     router.refresh()
   }
@@ -66,12 +69,14 @@ export default function CollapsiblePaidGroup({
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-sm font-semibold text-gray-700">{formatMXN(p.amount)}</span>
-                <button
-                  onClick={() => handleDelete(p.id)}
-                  className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity"
-                >
-                  <Trash2 size={14} />
-                </button>
+                {deletable && (
+                  <button
+                    onClick={() => handleDelete(p.id)}
+                    className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
               </div>
             </div>
           ))}
