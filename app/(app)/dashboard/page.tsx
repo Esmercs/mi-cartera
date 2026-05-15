@@ -506,16 +506,20 @@ export default async function DashboardPage({
         </>
       )}
 
-      {/* ── Cuentas entre nosotros (gastos shared con quién paga) ── */}
-      {(internalIOwe.length > 0 || internalOwesMe.length > 0) && (
+      {/* ── Cuentas con {otherName}: recurring shared + inter-person debts unificados ── */}
+      {(internalIOwe.length > 0 || internalOwesMe.length > 0 || visibleDebtsOwed.length > 0 || visibleDebtsToCollect.length > 0) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {internalIOwe.length > 0 && (
+          {/* Le debo a {otherName} */}
+          {(internalIOwe.length > 0 || visibleDebtsOwed.length > 0) && (
             <div className="card p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-red-600">Le debo a {otherName}</h2>
-                <span className="text-sm font-bold text-red-600">{formatMXN(totalIOwe)}</span>
+                <span className="text-sm font-bold text-red-600">
+                  {formatMXN(totalIOwe + totalOwed)}
+                </span>
               </div>
               <div className="space-y-0">
+                {/* Gastos recurrentes pendientes */}
                 {pendingIOwe.map(x => (
                   <div key={x.id} className="flex justify-between items-center py-2 border-b last:border-0 gap-2">
                     <p className="text-sm text-gray-800 truncate flex-1">{x.concept}</p>
@@ -528,7 +532,43 @@ export default async function DashboardPage({
                     />
                   </div>
                 ))}
+                {/* Deudas puntuales */}
+                {visibleDebtsOwed.map(d => (
+                  <div key={d.id} className="py-2 border-b last:border-0">
+                    <div className="flex justify-between items-start gap-2">
+                      <p className="text-sm text-gray-800 font-medium truncate flex-1">{d.concept}</p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-sm font-semibold text-red-500">
+                          {d.total_installments ? formatMXN(d.amount * (d.total_installments - d.paid_installments)) : formatMXN(d.amount)}
+                        </span>
+                        <MarkDebtPaidButton
+                          debtId={d.id}
+                          totalInstallments={d.total_installments ?? null}
+                          paidInstallments={d.paid_installments ?? 0}
+                          dueDate={d.due_date ?? null}
+                          concept={d.concept}
+                          amount={d.amount}
+                        />
+                      </div>
+                    </div>
+                    {d.total_installments && (
+                      <p className="text-xs text-purple-500 mt-0.5">
+                        {d.paid_installments}/{d.total_installments} cuotas · {formatMXN(d.amount)}/mes
+                      </p>
+                    )}
+                    {d.due_date && (
+                      <p className={`text-xs mt-0.5 ${isOverdue(d.due_date) ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
+                        {isOverdue(d.due_date) ? '⚠ ' : ''}Vence {formatMXDate(d.due_date)}
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
+              {hiddenDebtsOwed > 0 && (
+                <a href="/shared" className="block text-xs text-gray-400 hover:text-gray-600 text-center pt-1">
+                  + {hiddenDebtsOwed} más con fecha posterior →
+                </a>
+              )}
               {paidIOwe.length > 0 && (
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Pagados</p>
@@ -543,20 +583,54 @@ export default async function DashboardPage({
               )}
             </div>
           )}
-          {internalOwesMe.length > 0 && (
+
+          {/* {otherName} me debe */}
+          {(internalOwesMe.length > 0 || visibleDebtsToCollect.length > 0) && (
             <div className="card p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-green-700">{otherName} me debe</h2>
-                <span className="text-sm font-bold text-green-700">{formatMXN(totalOwesMe)}</span>
+                <span className="text-sm font-bold text-green-700">
+                  {formatMXN(totalOwesMe + totalToCollect)}
+                </span>
               </div>
               <div className="space-y-0">
+                {/* Gastos recurrentes pendientes */}
                 {pendingOwesMe.map(x => (
                   <div key={x.id} className="flex justify-between items-center py-2 border-b last:border-0">
                     <p className="text-sm text-gray-800 truncate">{x.concept}</p>
                     <span className="text-sm font-semibold text-green-600 shrink-0">{formatMXN(x.amount)}</span>
                   </div>
                 ))}
+                {/* Deudas puntuales */}
+                {visibleDebtsToCollect.map(d => (
+                  <div key={d.id} className="py-2 border-b last:border-0">
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-gray-800 font-medium truncate">{d.concept}</p>
+                        <p className="text-xs text-gray-400">{(d as any).debtor?.display_name}</p>
+                      </div>
+                      <span className="text-sm font-semibold text-green-600 shrink-0">
+                        {d.total_installments ? formatMXN(d.amount * (d.total_installments - d.paid_installments)) : formatMXN(d.amount)}
+                      </span>
+                    </div>
+                    {d.total_installments && (
+                      <p className="text-xs text-purple-500 mt-0.5">
+                        {d.paid_installments}/{d.total_installments} cuotas · {formatMXN(d.amount)}/mes
+                      </p>
+                    )}
+                    {d.due_date && (
+                      <p className={`text-xs mt-0.5 ${isOverdue(d.due_date) ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
+                        {isOverdue(d.due_date) ? '⚠ ' : ''}Vence {formatMXDate(d.due_date)}
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
+              {hiddenDebtsToCollect > 0 && (
+                <a href="/shared" className="block text-xs text-gray-400 hover:text-gray-600 text-center pt-1">
+                  + {hiddenDebtsToCollect} más con fecha posterior →
+                </a>
+              )}
               {paidOwesMe.length > 0 && (
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{otherName} ya pagó</p>
@@ -643,91 +717,6 @@ export default async function DashboardPage({
         </div>
       )}
 
-      {/* ── Deudas — 2 columnas, filtradas por próxima quincena ── */}
-      {(visibleDebtsOwed.length > 0 || visibleDebtsToCollect.length > 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {/* Lo que debo */}
-          {visibleDebtsOwed.length > 0 && (
-            <div className="card p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-red-600">Lo que debo</h2>
-                <span className="text-sm font-bold text-red-600">{formatMXN(totalOwed)}</span>
-              </div>
-              <div className="space-y-0">
-                {visibleDebtsOwed.map(d => (
-                  <div key={d.id} className="py-2.5 border-b last:border-0">
-                    <div className="flex justify-between items-start gap-2">
-                      <p className="text-sm text-gray-800 font-medium truncate">{d.concept}</p>
-                      <span className="text-sm font-semibold text-red-500 shrink-0">
-                        {d.total_installments
-                          ? formatMXN(d.amount * (d.total_installments - d.paid_installments))
-                          : formatMXN(d.amount)}
-                      </span>
-                    </div>
-                    {d.total_installments && (
-                      <p className="text-xs text-purple-500 mt-0.5">
-                        {d.paid_installments}/{d.total_installments} cuotas · {formatMXN(d.amount)}/mes
-                      </p>
-                    )}
-                    {d.due_date && (
-                      <p className={`text-xs mt-0.5 ${isOverdue(d.due_date) ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
-                        {isOverdue(d.due_date) ? '⚠ ' : ''}Vence {formatMXDate(d.due_date)}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {hiddenDebtsOwed > 0 && (
-                <a href="/shared" className="block text-xs text-gray-400 hover:text-gray-600 text-center pt-1">
-                  + {hiddenDebtsOwed} más con fecha posterior →
-                </a>
-              )}
-            </div>
-          )}
-
-          {/* Me deben */}
-          {visibleDebtsToCollect.length > 0 && (
-            <div className="card p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-green-700">Me deben</h2>
-                <span className="text-sm font-bold text-green-700">{formatMXN(totalToCollect)}</span>
-              </div>
-              <div className="space-y-0">
-                {visibleDebtsToCollect.map(d => (
-                  <div key={d.id} className="py-2.5 border-b last:border-0">
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="min-w-0">
-                        <p className="text-sm text-gray-800 font-medium truncate">{d.concept}</p>
-                        <p className="text-xs text-gray-400">{(d as any).debtor?.display_name}</p>
-                      </div>
-                      <span className="text-sm font-semibold text-green-600 shrink-0">
-                        {d.total_installments
-                          ? formatMXN(d.amount * (d.total_installments - d.paid_installments))
-                          : formatMXN(d.amount)}
-                      </span>
-                    </div>
-                    {d.total_installments && (
-                      <p className="text-xs text-purple-500 mt-0.5">
-                        {d.paid_installments}/{d.total_installments} cuotas · {formatMXN(d.amount)}/mes
-                      </p>
-                    )}
-                    {d.due_date && (
-                      <p className={`text-xs mt-0.5 ${isOverdue(d.due_date) ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
-                        {isOverdue(d.due_date) ? '⚠ ' : ''}Vence {formatMXDate(d.due_date)}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {hiddenDebtsToCollect > 0 && (
-                <a href="/shared" className="block text-xs text-gray-400 hover:text-gray-600 text-center pt-1">
-                  + {hiddenDebtsToCollect} más con fecha posterior →
-                </a>
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
     </div>
   )
