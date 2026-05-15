@@ -280,9 +280,9 @@ export default async function DashboardPage({
   const totalOwed       = (debtsOwed      ?? []).reduce((sum, d) => sum + debtPending(d), 0)
   const totalToCollect  = (debtsToCollect ?? []).reduce((sum, d) => sum + debtPending(d), 0)
 
-  // Deudas de "me deben" agrupadas por tarjeta (para mostrar desglose en card groups)
+  // Deudas de "me deben" agrupadas por tarjeta — solo las que vencen en esta quincena
   const debtsByCard = new Map<string, LinkedDebt[]>()
-  for (const d of (debtsToCollect ?? [])) {
+  for (const d of (debtsToCollect ?? []).filter(d => !d.due_date || d.due_date <= nextPeriodStr)) {
     const cid = (d as any).card_id
     if (!cid) continue
     const entry: LinkedDebt = {
