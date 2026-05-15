@@ -599,19 +599,14 @@ export default async function DashboardPage({
             {paidShared.length > 0 && (
               <CollapsiblePaidGroup label="Gastos casa" payments={paidShared} />
             )}
-            {paidOther.length > 0 && (
-              <CollapsiblePaidGroup label={`A ${otherName}`} payments={paidOther} />
-            )}
-            {paidIOwe.length > 0 && (
+            {(paidOther.length > 0 || paidIOwe.length > 0) && (
               <CollapsiblePaidGroup
-                label={`Pagos a ${otherName}`}
+                label={`A ${otherName}`}
                 deletable={false}
-                payments={paidIOwe.map(x => ({
-                  id: x.settlement.id,
-                  concept: x.concept,
-                  amount: x.amount,
-                  payment_type: 'fijo',
-                }))}
+                payments={[
+                  ...paidOther.map(p => ({ id: p.id, concept: p.concept, amount: p.amount, payment_type: p.payment_type })),
+                  ...paidIOwe.map(x => ({ id: x.settlement.id, concept: x.concept, amount: x.amount, payment_type: 'fijo' as const })),
+                ]}
               />
             )}
           </div>
