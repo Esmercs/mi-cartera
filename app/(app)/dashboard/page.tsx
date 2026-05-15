@@ -10,6 +10,7 @@ import AddPeriodPaymentForm from '@/components/dashboard/add-period-payment-form
 import CollapsiblePaidGroup from '@/components/dashboard/collapsible-paid-group'
 import SettleInternalDebtButton from '@/components/dashboard/settle-internal-debt-button'
 import UnsettleInternalDebtButton from '@/components/dashboard/unsettle-internal-debt-button'
+import DeletePeriodPaymentButton from '@/components/dashboard/delete-period-payment-button'
 import AddIncomeForm from '@/components/dashboard/add-income-form'
 import RegisterNextPaymentButton from '@/components/dashboard/register-next-payment-button'
 import CollapsibleCardGroup, { type LinkedDebt } from '@/components/dashboard/collapsible-card-group'
@@ -569,7 +570,7 @@ export default async function DashboardPage({
                   + {hiddenDebtsOwed} más con fecha posterior →
                 </a>
               )}
-              {paidIOwe.length > 0 && (
+              {(paidIOwe.length > 0 || paidOther.length > 0) && (
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Pagados</p>
                   {paidIOwe.map(x => (
@@ -577,6 +578,13 @@ export default async function DashboardPage({
                       <p className="text-xs truncate flex-1 line-through">{x.concept}</p>
                       <span className="text-xs shrink-0">{formatMXN(x.amount)}</span>
                       <UnsettleInternalDebtButton settlementId={x.settlement.id} />
+                    </div>
+                  ))}
+                  {paidOther.map(p => (
+                    <div key={p.id} className="flex justify-between items-center py-1.5 gap-2 text-gray-400">
+                      <p className="text-xs truncate flex-1 line-through">{p.concept}</p>
+                      <span className="text-xs shrink-0">{formatMXN(p.amount)}</span>
+                      <DeletePeriodPaymentButton paymentId={p.id} />
                     </div>
                   ))}
                 </div>
@@ -659,7 +667,7 @@ export default async function DashboardPage({
           </div>
         </div>
 
-        {(payments?.length ?? 0) === 0 && paidIOwe.length === 0 ? (
+        {(payments?.length ?? 0) === 0 ? (
           <p className="text-sm text-gray-400">Sin pagos registrados esta quincena.</p>
         ) : (
           <div className="space-y-2">
@@ -672,16 +680,6 @@ export default async function DashboardPage({
             ))}
             {paidShared.length > 0 && (
               <CollapsiblePaidGroup label="Gastos casa" payments={paidShared} />
-            )}
-            {(paidOther.length > 0 || paidIOwe.length > 0) && (
-              <CollapsiblePaidGroup
-                label={`A ${otherName}`}
-                deletable={false}
-                payments={[
-                  ...paidOther.map(p => ({ id: p.id, concept: p.concept, amount: p.amount, payment_type: p.payment_type })),
-                  ...paidIOwe.map(x => ({ id: x.settlement.id, concept: x.concept, amount: x.amount, payment_type: 'fijo' as const })),
-                ]}
-              />
             )}
           </div>
         )}
