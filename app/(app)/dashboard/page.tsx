@@ -470,6 +470,8 @@ export default async function DashboardPage({
                           totalInstallments={item.totalInstallments}
                           paidInstallments={item.paidInstallments}
                           dueDate={item.dueDate}
+                          concept={item.concept}
+                          amount={item.amount}
                         />
                       ) : (
                         <RegisterNextPaymentButton

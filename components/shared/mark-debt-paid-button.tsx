@@ -15,12 +15,16 @@ export default function MarkDebtPaidButton({
   totalInstallments,
   paidInstallments,
   dueDate,
+  concept,
+  amount,
 }: {
   debtId: string
   creditorId?: string
   totalInstallments: number | null
   paidInstallments: number
   dueDate?: string | null
+  concept?: string
+  amount?: number
 }) {
   const router = useRouter()
   const supabase = createClient()
@@ -46,12 +50,38 @@ export default function MarkDebtPaidButton({
       paid_at: isDone ? new Date().toISOString().split('T')[0] : null,
     }
 
-    // Avanzar due_date al siguiente mes si quedan cuotas
     if (isInstallment && !isDone && dueDate) {
       update.due_date = addOneMonth(dueDate)
     }
 
     await supabase.from('inter_person_debts').update(update).eq('id', debtId)
+
+    // Registrar en period_payments del usuario actual para que aparezca en "Ya pagado"
+    if (concept && amount) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const today = new Date()
+        // Buscar el período activo del usuario (el más reciente con period_date >= hoy)
+        const { data: period } = await supabase
+          .from('periods')
+          .select('id')
+          .eq('owner_id', user.id)
+          .gte('period_date', today.toISOString().split('T')[0])
+          .order('period_date', { ascending: true })
+          .limit(1)
+          .single()
+
+        if (period) {
+          const installmentAmount = isInstallment ? amount : amount
+          await supabase.from('period_payments').insert({
+            period_id: period.id,
+            concept: isInstallment ? `${concept} (cuota ${(newPaid ?? paidInstallments + 1)})` : concept,
+            amount: installmentAmount,
+            payment_type: 'extra',
+          })
+        }
+      }
+    }
 
     setLoading(false)
     router.refresh()
