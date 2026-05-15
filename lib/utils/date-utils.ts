@@ -84,7 +84,7 @@ export function getCurrentPeriodDates(): { start: Date; end: Date; label: string
   }
 }
 
-// Returns period dates for the Nth upcoming quincena (0 = next from today, 1 = after that, etc.)
+// Returns period dates for the Nth quincena (0 = current, 1 = next, etc.)
 export function getOffsetPeriodDates(offset: number): {
   start: Date; end: Date; label: string; payDay: 15 | 30
 } {
@@ -92,21 +92,21 @@ export function getOffsetPeriodDates(offset: number): {
   const day = now.getDate()
   const ld  = lastDayOf(now.getFullYear(), now.getMonth())
 
-  // Determine starting state for "next" quincena (offset=0)
+  // Determine starting state for "current" quincena (offset=0)
   let isB: boolean
   let m = now.getMonth()
   let y = now.getFullYear()
 
   if (!inStateB(day, ld)) {
-    // In A → next is B starting on ld of this month
-    isB = true
+    // Currently in A (day 15..ld-1)
+    isB = false
   } else if (day >= ld) {
-    // In B (just started) → next is A: 15 of next month
-    isB = false
-    m++; if (m > 11) { m = 0; y++ }
+    // Currently in B starting this month (day=ld)
+    isB = true
   } else {
-    // In B (started last month, day < 15) → next is A: 15 of this month
-    isB = false
+    // Currently in B but started last month (day < 15) — anchor start to prev month's ld
+    isB = true
+    m--; if (m < 0) { m = 11; y-- }
   }
 
   for (let i = 0; i < offset; i++) {
@@ -143,13 +143,13 @@ export function getOffsetPeriodDates(offset: number): {
 
 // Used by deudas page — returns start/end of next upcoming quincena
 export function getNextPeriodDates(): { start: Date; end: Date; label: string } {
-  const { start, end, label } = getOffsetPeriodDates(0)
+  const { start, end, label } = getOffsetPeriodDates(1)
   return { start, end, label }
 }
 
 // Returns the next payment cutoff (payDay) from today's perspective
 export function getNextPaymentDay(): { day: 15 | 30; label: string } {
-  const { payDay, end } = getOffsetPeriodDates(0)
+  const { payDay, end } = getOffsetPeriodDates(1)
   return { day: payDay, label: format(end, "d 'de' MMM yyyy", { locale: es }) }
 }
 

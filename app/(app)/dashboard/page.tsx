@@ -327,9 +327,11 @@ export default async function DashboardPage({
         <PeriodPaymentsList payments={payments ?? []} />
       </div>
 
-      {/* ── Próxima quincena — header de navegación ── */}
+      {/* ── Esta quincena — header de navegación ── */}
       <div className="flex items-center gap-2 px-1">
-        <h2 className="font-semibold text-gray-700 text-sm">Próxima quincena</h2>
+        <h2 className="font-semibold text-gray-700 text-sm">
+          {periodOffset === 0 ? 'Esta quincena' : 'Próxima quincena'}
+        </h2>
         <div className="flex items-center gap-1">
           {periodOffset > 0 && <PeriodNavButton offset={periodOffset - 1} label="‹" />}
           <span className="text-xs text-gray-400 font-medium">{nextLabel}</span>
