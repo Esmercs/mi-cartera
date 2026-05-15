@@ -600,7 +600,7 @@ export default async function DashboardPage({
               <CollapsiblePaidGroup label="Gastos casa" payments={paidShared} />
             )}
             {paidOther.length > 0 && (
-              <CollapsiblePaidGroup label="Otros" payments={paidOther} />
+              <CollapsiblePaidGroup label={`A ${otherName}`} payments={paidOther} />
             )}
             {paidIOwe.length > 0 && (
               <CollapsiblePaidGroup
