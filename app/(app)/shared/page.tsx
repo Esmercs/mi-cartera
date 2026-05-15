@@ -79,6 +79,11 @@ export default async function SharedPage() {
                       <span className="text-gray-300 mx-1">·</span>
                       <span className="text-ale">{formatMXN(e.ale_amount)}</span>
                     </p>
+                    {e.paid_by && e.paid_by !== 'each' && (
+                      <p className="text-xs text-purple-600 mt-0.5">
+                        Paga {e.paid_by === 'lalo' ? 'Lalo' : 'Ale'}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="text-right">
@@ -92,6 +97,8 @@ export default async function SharedPage() {
                       intervalType={e.interval_type}
                       paymentDay={e.payment_day ?? 15}
                       cardId={e.card_id}
+                      ownership="shared"
+                      paidBy={e.paid_by}
                     />
                   </div>
                 </div>
@@ -107,6 +114,7 @@ export default async function SharedPage() {
                     <th className="pb-2 font-medium text-lalo-dark">Lalo</th>
                     <th className="pb-2 font-medium text-ale-dark">Ale</th>
                     <th className="pb-2 font-medium">Día de pago</th>
+                    <th className="pb-2 font-medium">Paga</th>
                     <th className="pb-2"></th>
                   </tr>
                 </thead>
@@ -118,6 +126,12 @@ export default async function SharedPage() {
                       <td className="py-2.5 text-lalo font-medium">{formatMXN(e.lalo_amount)}</td>
                       <td className="py-2.5 text-ale font-medium">{formatMXN(e.ale_amount)}</td>
                       <td className="py-2.5 text-xs text-gray-400">{e.payment_day === 0 ? '15 y 30' : e.payment_day ? `Día ${e.payment_day}` : '—'}</td>
+                      <td className="py-2.5 text-xs">
+                        {!e.paid_by || e.paid_by === 'each'
+                          ? <span className="text-gray-400">Cada quien</span>
+                          : <span className="text-purple-600 font-medium">{e.paid_by === 'lalo' ? 'Lalo' : 'Ale'}</span>
+                        }
+                      </td>
                       <td className="py-2.5">
                         <EditExpenseButton
                           id={e.id}
@@ -127,6 +141,8 @@ export default async function SharedPage() {
                           paymentDay={e.payment_day ?? 15}
                           nextPaymentDate={e.next_payment_date}
                           cardId={e.card_id}
+                          ownership="shared"
+                          paidBy={e.paid_by}
                         />
                       </td>
                     </tr>
