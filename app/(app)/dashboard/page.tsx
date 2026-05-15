@@ -7,7 +7,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import type { PeriodSummary, InstallmentPlan, InterPersonDebt, IncomeConfig, ScheduledPayment, RecurringExpenseSplit } from '@/types/database'
 import AddPeriodPaymentForm from '@/components/dashboard/add-period-payment-form'
-import PeriodPaymentsList from '@/components/dashboard/period-payments-list'
+import CollapsiblePaidGroup from '@/components/dashboard/collapsible-paid-group'
 import AddIncomeForm from '@/components/dashboard/add-income-form'
 import RegisterNextPaymentButton from '@/components/dashboard/register-next-payment-button'
 import CollapsibleCardGroup, { type LinkedDebt } from '@/components/dashboard/collapsible-card-group'
@@ -103,12 +103,14 @@ export default async function DashboardPage({
   const isLalo      = (profile as any)?.display_name?.toLowerCase() === 'lalo'
   const myOwnership = isLalo ? 'lalo' : 'ale'
 
-  // Grupo 2: gastos fijos + tarjetas (dependen de myOwnership) en paralelo
-  const [{ data: nextFijosByDay }, { data: nextFijosByDate }, { data: allCards }] = await Promise.all([
+  // Grupo 2: gastos fijos + tarjetas + concepts compartidos (dependen de myOwnership) en paralelo
+  const [{ data: nextFijosByDay }, { data: nextFijosByDate }, { data: allCards }, { data: sharedConceptsRows }] = await Promise.all([
     supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']).or(`payment_day.eq.${nextPayDay},payment_day.eq.0,payment_day.is.null`).in('interval_type', ['quincenal', 'mensual']) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']).in('interval_type', ['bimestral', 'trimestral', 'anual', 'c/15 dias', 'c/21 dias']).gte('next_payment_date', nextStartStr).lte('next_payment_date', nextPeriodStr) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.from('cards').select('id, name').eq('is_active', true),
+    supabase.from('recurring_expenses_split').select('concept').eq('is_active', true).eq('ownership', 'shared') as Promise<{ data: { concept: string }[] | null }>,
   ])
+  const sharedConceptSet = new Set((sharedConceptsRows ?? []).map(r => r.concept))
   const cardNameMap = new Map((allCards ?? []).map(c => [c.id, c.name]))
 
   const nextFijos = [...(nextFijosByDay ?? []), ...(nextFijosByDate ?? [])]
@@ -189,6 +191,23 @@ export default async function DashboardPage({
   }
   const cardGroups = Array.from(cardGroupMap.values())
 
+
+  // Agrupar pagos registrados: por tarjeta · gastos casa (shared sin tarjeta) · otros
+  type PaidPayment = { id: string; concept: string; amount: number; payment_type: string }
+  const paidByCard = new Map<string, PaidPayment[]>()
+  const paidShared: PaidPayment[] = []
+  const paidOther:  PaidPayment[] = []
+  for (const p of (payments ?? [])) {
+    const item: PaidPayment = { id: p.id, concept: p.concept, amount: p.amount, payment_type: p.payment_type }
+    if (p.card_id) {
+      if (!paidByCard.has(p.card_id)) paidByCard.set(p.card_id, [])
+      paidByCard.get(p.card_id)!.push(item)
+    } else if (sharedConceptSet.has(p.concept)) {
+      paidShared.push(item)
+    } else {
+      paidOther.push(item)
+    }
+  }
 
   const totalMSI = (installments ?? []).reduce((sum, p) => sum + p.monthly_amount, 0)
   const debtPending = (d: InterPersonDebt) =>
@@ -318,15 +337,6 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      {/* ── Pagos registrados esta quincena ── */}
-      <div className="card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-gray-800 text-sm">Pagos de la quincena</h2>
-          <AddPeriodPaymentForm periodId={period?.id ?? ''} />
-        </div>
-        <PeriodPaymentsList payments={payments ?? []} />
-      </div>
-
       {/* ── Esta quincena — header de navegación ── */}
       <div className="flex items-center gap-2 px-1">
         <h2 className="font-semibold text-gray-700 text-sm">
@@ -429,6 +439,39 @@ export default async function DashboardPage({
           </div>
         </>
       )}
+
+      {/* ── Pagos registrados de la quincena (agrupados) ── */}
+      <div className="card p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-gray-800 text-sm">Pagos de la quincena</h2>
+          <div className="flex items-center gap-2">
+            {totalPagado > 0 && (
+              <span className="text-xs font-semibold text-gray-500">{formatMXN(totalPagado)}</span>
+            )}
+            <AddPeriodPaymentForm periodId={period?.id ?? ''} />
+          </div>
+        </div>
+
+        {(payments?.length ?? 0) === 0 ? (
+          <p className="text-sm text-gray-400">Sin pagos registrados esta quincena.</p>
+        ) : (
+          <div className="space-y-2">
+            {Array.from(paidByCard.entries()).map(([cardId, items]) => (
+              <CollapsiblePaidGroup
+                key={cardId}
+                label={cardNameMap.get(cardId) ?? 'Tarjeta'}
+                payments={items}
+              />
+            ))}
+            {paidShared.length > 0 && (
+              <CollapsiblePaidGroup label="Gastos casa" payments={paidShared} />
+            )}
+            {paidOther.length > 0 && (
+              <CollapsiblePaidGroup label="Otros" payments={paidOther} />
+            )}
+          </div>
+        )}
+      </div>
 
       {/* ── MSIs activos ── */}
       {(installments?.length ?? 0) > 0 && (
