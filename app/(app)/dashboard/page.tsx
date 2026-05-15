@@ -680,6 +680,7 @@ export default async function DashboardPage({
               {paidOwesMe.length > 0 && (
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{otherName} ya pagó</p>
+                  <p className="text-[10px] text-gray-300 uppercase tracking-wide mt-1 mb-0.5">Gastos casa</p>
                   {paidOwesMe.map(x => (
                     <div key={x.id} className="flex justify-between items-center py-1.5 gap-2 text-gray-400">
                       <p className="text-xs truncate flex-1 line-through">{x.concept}</p>
