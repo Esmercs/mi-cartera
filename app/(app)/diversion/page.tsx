@@ -9,6 +9,7 @@ import type { FunBudgetSummary, FunExpense } from '@/types/database'
 import AddFunExpenseForm from '@/components/diversion/add-fun-expense-form'
 import DeleteFunExpenseButton from '@/components/diversion/delete-fun-expense-button'
 import EditBudgetButton from '@/components/diversion/edit-budget-button'
+import ExpandableHistoryRow from '@/components/diversion/expandable-history-row'
 
 export default async function DiversionPage() {
   const supabase = createServerClient()
@@ -186,18 +187,7 @@ export default async function DiversionPage() {
         <div className="card p-5 space-y-3">
           <h2 className="font-semibold text-gray-700 text-sm">Historial reciente</h2>
           {history!.map(h => (
-            <div key={h.id} className="flex items-center justify-between text-sm py-1.5 border-b last:border-0 gap-2">
-              <span className="text-gray-600 shrink-0 text-xs">
-                {format(new Date(h.period_start), "d MMM", { locale: es })} –{' '}
-                {format(new Date(h.period_end), "d MMM yy", { locale: es })}
-              </span>
-              <div className="flex items-center gap-2 md:gap-4 ml-auto shrink-0">
-                <span className="text-gray-500 text-xs">{formatMXN(h.total_spent)} / {formatMXN(h.base_budget)}</span>
-                <span className={`text-xs font-medium ${h.remaining_budget < 0 ? 'text-red-500' : 'text-green-600'}`}>
-                  {h.remaining_budget < 0 ? '−' : '+'}{formatMXN(Math.abs(h.remaining_budget))}
-                </span>
-              </div>
-            </div>
+            <ExpandableHistoryRow key={h.id} h={h} />
           ))}
         </div>
       )}
