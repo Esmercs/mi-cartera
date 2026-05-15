@@ -574,7 +574,7 @@ export default async function DashboardPage({
       {/* ── Pagos registrados de la quincena (agrupados) ── */}
       <div className="card p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-gray-800 text-sm">Pagos de la quincena</h2>
+          <h2 className="font-semibold text-gray-800 text-sm">Ya pagado esta quincena</h2>
           <div className="flex items-center gap-2">
             {totalPagado > 0 && (
               <span className="text-xs font-semibold text-gray-500">{formatMXN(totalPagado)}</span>
