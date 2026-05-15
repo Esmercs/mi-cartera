@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Pencil, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import type { IntervalType, Ownership } from '@/types/database'
+import type { IntervalType, Ownership, PaidBy } from '@/types/database'
 
 const intervals: { value: IntervalType; label: string }[] = [
   { value: 'quincenal',  label: 'Quincenal' },
@@ -26,10 +26,11 @@ interface Props {
   nextPaymentDate?: string | null
   cardId?: string | null
   ownership: Ownership
+  paidBy?: PaidBy
 }
 
 export default function EditExpenseButton({
-  id, concept, totalAmount, intervalType, paymentDay, nextPaymentDate, cardId, ownership,
+  id, concept, totalAmount, intervalType, paymentDay, nextPaymentDate, cardId, ownership, paidBy,
 }: Props) {
   const router = useRouter()
   const supabase = createClient()
@@ -38,6 +39,7 @@ export default function EditExpenseButton({
     concept,
     total_amount: totalAmount.toString(),
     ownership,
+    paid_by: (paidBy ?? 'each') as PaidBy,
     interval_type: intervalType,
     payment_day: (paymentDay ?? 15).toString(),
     next_payment_date: nextPaymentDate ?? '',
@@ -54,6 +56,7 @@ export default function EditExpenseButton({
       concept,
       total_amount: totalAmount.toString(),
       ownership,
+      paid_by: (paidBy ?? 'each') as PaidBy,
       interval_type: intervalType,
       payment_day: (paymentDay ?? 15).toString(),
       next_payment_date: nextPaymentDate ?? '',
@@ -90,6 +93,7 @@ export default function EditExpenseButton({
         payment_day: parseInt(form.payment_day) as 0 | 15 | 30,
         next_payment_date: isDateBased ? (form.next_payment_date || null) : null,
         card_id: form.card_id || null,
+        paid_by: form.ownership === 'shared' ? form.paid_by : 'each',
       })
       .eq('id', id)
     setLoading(false)
@@ -136,6 +140,17 @@ export default function EditExpenseButton({
                   <option value="ale">Ale (personal)</option>
                 </select>
               </div>
+              {form.ownership === 'shared' && (
+                <div>
+                  <label className="label">¿Quién paga?</label>
+                  <select className="input" value={form.paid_by}
+                    onChange={e => set('paid_by', e.target.value)}>
+                    <option value="each">Cada quien su parte</option>
+                    <option value="lalo">Lalo paga todo (Ale le debe)</option>
+                    <option value="ale">Ale paga todo (Lalo le debe)</option>
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="label">Intervalo</label>
                 <select className="input" value={form.interval_type}

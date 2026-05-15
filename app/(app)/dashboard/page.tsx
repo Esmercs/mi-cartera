@@ -8,6 +8,8 @@ import { es } from 'date-fns/locale'
 import type { PeriodSummary, InstallmentPlan, InterPersonDebt, IncomeConfig, ScheduledPayment, RecurringExpenseSplit } from '@/types/database'
 import AddPeriodPaymentForm from '@/components/dashboard/add-period-payment-form'
 import CollapsiblePaidGroup from '@/components/dashboard/collapsible-paid-group'
+import SettleInternalDebtButton from '@/components/dashboard/settle-internal-debt-button'
+import UnsettleInternalDebtButton from '@/components/dashboard/unsettle-internal-debt-button'
 import AddIncomeForm from '@/components/dashboard/add-income-form'
 import RegisterNextPaymentButton from '@/components/dashboard/register-next-payment-button'
 import CollapsibleCardGroup, { type LinkedDebt } from '@/components/dashboard/collapsible-card-group'
@@ -103,17 +105,70 @@ export default async function DashboardPage({
   const isLalo      = (profile as any)?.display_name?.toLowerCase() === 'lalo'
   const myOwnership = isLalo ? 'lalo' : 'ale'
 
-  // Grupo 2: gastos fijos + tarjetas + concepts compartidos (dependen de myOwnership) en paralelo
-  const [{ data: nextFijosByDay }, { data: nextFijosByDate }, { data: allCards }, { data: sharedConceptsRows }] = await Promise.all([
+  // Grupo 2: gastos fijos + tarjetas + concepts compartidos + settlements en paralelo
+  const [
+    { data: nextFijosByDay },
+    { data: nextFijosByDate },
+    { data: allCards },
+    { data: sharedConceptsRows },
+    { data: settlementsRaw },
+  ] = await Promise.all([
     supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']).or(`payment_day.eq.${nextPayDay},payment_day.eq.0,payment_day.is.null`).in('interval_type', ['quincenal', 'mensual']) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']).in('interval_type', ['bimestral', 'trimestral', 'anual', 'c/15 dias', 'c/21 dias']).gte('next_payment_date', nextStartStr).lte('next_payment_date', nextPeriodStr) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.from('cards').select('id, name').eq('is_active', true),
     supabase.from('recurring_expenses_split').select('concept').eq('is_active', true).eq('ownership', 'shared') as Promise<{ data: { concept: string }[] | null }>,
+    (supabase.from('internal_debt_settlements') as any).select('*').eq('period_date', nextPeriodStr) as Promise<{ data: any[] | null }>,
   ])
+  const settlements = (settlementsRaw ?? []) as any[]
   const sharedConceptSet = new Set((sharedConceptsRows ?? []).map(r => r.concept))
   const cardNameMap = new Map((allCards ?? []).map(c => [c.id, c.name]))
 
   const nextFijos = [...(nextFijosByDay ?? []), ...(nextFijosByDate ?? [])]
+
+  // Cuentas internas (gastos shared con paid_by lalo|ale) — esta quincena
+  const otherOwnership = isLalo ? 'ale' : 'lalo'
+  const otherName      = isLalo ? 'Ale' : 'Lalo'
+  // Lookup: settlement por (recurring_expense_id, payer)
+  const settlementMap = new Map<string, any>()
+  for (const s of settlements) {
+    settlementMap.set(`${s.recurring_expense_id}|${s.payer}`, s)
+  }
+  type InternalRow = {
+    id: string
+    concept: string
+    amount: number
+    settlement: any | null      // null si pendiente
+  }
+  const internalIOwe:   InternalRow[] = []
+  const internalOwesMe: InternalRow[] = []
+  for (const e of nextFijos) {
+    if (e.ownership !== 'shared') continue
+    if (e.paid_by === otherOwnership) {
+      // Yo soy quien debe pagar mi parte → payer = myOwnership
+      const s = settlementMap.get(`${e.id}|${myOwnership}`) ?? null
+      internalIOwe.push({
+        id: e.id,
+        concept: e.concept,
+        amount: isLalo ? e.lalo_amount : e.ale_amount,
+        settlement: s,
+      })
+    } else if (e.paid_by === myOwnership) {
+      // El otro debe pagarme su parte → payer = otherOwnership
+      const s = settlementMap.get(`${e.id}|${otherOwnership}`) ?? null
+      internalOwesMe.push({
+        id: e.id,
+        concept: e.concept,
+        amount: isLalo ? e.ale_amount : e.lalo_amount,
+        settlement: s,
+      })
+    }
+  }
+  const pendingIOwe   = internalIOwe.filter(x => !x.settlement)
+  const paidIOwe      = internalIOwe.filter(x => x.settlement)
+  const pendingOwesMe = internalOwesMe.filter(x => !x.settlement)
+  const paidOwesMe    = internalOwesMe.filter(x => x.settlement)
+  const totalIOwe     = pendingIOwe.reduce((s, x) => s + x.amount, 0)
+  const totalOwesMe   = pendingOwesMe.reduce((s, x) => s + x.amount, 0)
 
   // Conceptos ya pagados en el período actual (para filtrar fijos pre-pagados)
   const paidKeys = new Set(
@@ -139,12 +194,21 @@ export default async function DashboardPage({
       totalInstallments: null, paidInstallments: 0, dueDate: null,
       recurringExpenseId: null, intervalType: null, currentNextPaymentDate: null,
     })),
-    ...(nextFijos).filter(e => !paidKeys.has(`${e.concept}|${e.card_id ?? ''}`)).map(e => {
+    ...(nextFijos)
+      .filter(e => !paidKeys.has(`${e.concept}|${e.card_id ?? ''}`))
+      // Si es shared y lo paga el otro, no aparece en mi lista (queda como deuda interna)
+      .filter(e => !(e.ownership === 'shared' && (e.paid_by === 'lalo' || e.paid_by === 'ale') && e.paid_by !== myOwnership))
+      .map(e => {
       const isDateBased = ['bimestral', 'trimestral', 'anual', 'c/15 dias', 'c/21 dias'].includes(e.interval_type)
       const cardName = e.card_id ? (cardNameMap.get(e.card_id) ?? null) : null
+      // Si shared y yo lo pago, debo el total; si shared y cada quien su parte, sólo mi parte
+      const sharedFullPayer = e.ownership === 'shared' && e.paid_by === myOwnership
+      const amount = e.ownership === 'shared'
+        ? (sharedFullPayer ? e.total_amount : (isLalo ? e.lalo_amount : e.ale_amount))
+        : e.total_amount
       return {
         key: e.id, concept: e.concept,
-        amount: e.ownership === 'shared' ? (isLalo ? e.lalo_amount : e.ale_amount) : e.total_amount,
+        amount,
         card: cardName, type: 'fijo' as const,
         cardId: e.card_id ?? null, planId: null, scheduledId: null,
         debtId: null, creditorName: null,
@@ -438,6 +502,73 @@ export default async function DashboardPage({
             <span className="text-sm font-bold text-gray-900">{formatMXN(nextItems.reduce((s, i) => s + i.amount, 0))}</span>
           </div>
         </>
+      )}
+
+      {/* ── Cuentas entre nosotros (gastos shared con quién paga) ── */}
+      {(internalIOwe.length > 0 || internalOwesMe.length > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {internalIOwe.length > 0 && (
+            <div className="card p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-red-600">Le debo a {otherName}</h2>
+                <span className="text-sm font-bold text-red-600">{formatMXN(totalIOwe)}</span>
+              </div>
+              <div className="space-y-0">
+                {pendingIOwe.map(x => (
+                  <div key={x.id} className="flex justify-between items-center py-2 border-b last:border-0 gap-2">
+                    <p className="text-sm text-gray-800 truncate flex-1">{x.concept}</p>
+                    <span className="text-sm font-semibold text-red-500 shrink-0">{formatMXN(x.amount)}</span>
+                    <SettleInternalDebtButton
+                      recurringExpenseId={x.id}
+                      periodDate={nextPeriodStr}
+                      payer={myOwnership as 'lalo' | 'ale'}
+                      amount={x.amount}
+                    />
+                  </div>
+                ))}
+              </div>
+              {paidIOwe.length > 0 && (
+                <div className="pt-2 border-t border-gray-100">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Pagados</p>
+                  {paidIOwe.map(x => (
+                    <div key={x.id} className="flex justify-between items-center py-1.5 gap-2 text-gray-400">
+                      <p className="text-xs truncate flex-1 line-through">{x.concept}</p>
+                      <span className="text-xs shrink-0">{formatMXN(x.amount)}</span>
+                      <UnsettleInternalDebtButton settlementId={x.settlement.id} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {internalOwesMe.length > 0 && (
+            <div className="card p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-green-700">{otherName} me debe</h2>
+                <span className="text-sm font-bold text-green-700">{formatMXN(totalOwesMe)}</span>
+              </div>
+              <div className="space-y-0">
+                {pendingOwesMe.map(x => (
+                  <div key={x.id} className="flex justify-between items-center py-2 border-b last:border-0">
+                    <p className="text-sm text-gray-800 truncate">{x.concept}</p>
+                    <span className="text-sm font-semibold text-green-600 shrink-0">{formatMXN(x.amount)}</span>
+                  </div>
+                ))}
+              </div>
+              {paidOwesMe.length > 0 && (
+                <div className="pt-2 border-t border-gray-100">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{otherName} ya pagó</p>
+                  {paidOwesMe.map(x => (
+                    <div key={x.id} className="flex justify-between items-center py-1.5 gap-2 text-gray-400">
+                      <p className="text-xs truncate flex-1 line-through">{x.concept}</p>
+                      <span className="text-xs shrink-0">{formatMXN(x.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── Pagos registrados de la quincena (agrupados) ── */}

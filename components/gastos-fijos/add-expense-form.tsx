@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import type { Ownership, IntervalType } from '@/types/database'
+import type { Ownership, IntervalType, PaidBy } from '@/types/database'
 
 const intervals: { value: IntervalType; label: string }[] = [
   { value: 'quincenal',   label: 'Quincenal' },
@@ -25,6 +25,7 @@ export default function AddExpenseForm() {
     concept: '',
     total_amount: '',
     ownership: 'shared' as Ownership,
+    paid_by: 'each' as PaidBy,
     interval_type: 'mensual' as IntervalType,
     payment_day: '15',
     next_payment_date: '',
@@ -64,6 +65,7 @@ export default function AddExpenseForm() {
       payment_day: parseInt(form.payment_day) as 0 | 15 | 30,
       next_payment_date: isDateBased ? (form.next_payment_date || null) : null,
       card_id: form.card_id || null,
+      paid_by: form.ownership === 'shared' ? form.paid_by : 'each',
     })
 
     setOpen(false)
@@ -109,6 +111,17 @@ export default function AddExpenseForm() {
                   <option value="ale">Ale (personal)</option>
                 </select>
               </div>
+              {form.ownership === 'shared' && (
+                <div>
+                  <label className="label">¿Quién paga?</label>
+                  <select className="input" value={form.paid_by}
+                    onChange={e => set('paid_by', e.target.value)}>
+                    <option value="each">Cada quien su parte</option>
+                    <option value="lalo">Lalo paga todo (Ale le debe)</option>
+                    <option value="ale">Ale paga todo (Lalo le debe)</option>
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="label">Intervalo</label>
                 <select className="input" value={form.interval_type}

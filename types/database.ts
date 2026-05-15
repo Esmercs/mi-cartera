@@ -1,6 +1,7 @@
 export type UserRole = 'admin' | 'user'
 export type UserStatus = 'pending' | 'approved' | 'rejected'
 export type Ownership = 'lalo' | 'ale' | 'shared'
+export type PaidBy = 'each' | 'lalo' | 'ale'
 export type CardType = 'credit' | 'debit' | 'cash'
 export type PaymentType = 'fijo' | 'extra'
 export type IntervalType =
@@ -63,6 +64,7 @@ export interface RecurringExpense {
   card_id: string | null
   is_active: boolean
   notes: string | null
+  paid_by: PaidBy
   created_at: string
 }
 
@@ -171,6 +173,18 @@ export interface ScheduledPayment {
   created_at: string
   // joined
   cards?: { name: string } | null
+}
+
+export interface InternalDebtSettlement {
+  id: string
+  recurring_expense_id: string
+  period_date: string
+  payer: 'lalo' | 'ale'
+  amount: number
+  paid_at: string
+  paid_by_user_id: string
+  notes: string | null
+  created_at: string
 }
 
 export interface InterPersonDebt {

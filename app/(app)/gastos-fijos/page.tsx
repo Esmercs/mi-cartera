@@ -252,6 +252,9 @@ function ExpenseTable({
                 {e.card_id && cardMap.get(e.card_id) && (
                   <span className="ml-1 text-brand-600">· {cardMap.get(e.card_id)}</span>
                 )}
+                {e.ownership === 'shared' && e.paid_by && e.paid_by !== 'each' && (
+                  <span className="ml-1 text-purple-600">· Paga {e.paid_by === 'lalo' ? 'Lalo' : 'Ale'}</span>
+                )}
               </p>
               {showSplit && (
                 <p className="text-xs mt-0.5">
@@ -272,6 +275,7 @@ function ExpenseTable({
                 nextPaymentDate={e.next_payment_date}
                 cardId={e.card_id}
                 ownership={e.ownership}
+                paidBy={e.paid_by}
               />
               <DeleteExpenseButton id={e.id} />
             </div>
@@ -326,6 +330,7 @@ function ExpenseTable({
                       paymentDay={e.payment_day ?? 15}
                       cardId={e.card_id}
                       ownership={e.ownership}
+                      paidBy={e.paid_by}
                     />
                     <DeleteExpenseButton id={e.id} />
                   </div>
