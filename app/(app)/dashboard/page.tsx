@@ -520,50 +520,62 @@ export default async function DashboardPage({
                 </span>
               </div>
               <div className="space-y-0">
-                {/* Gastos recurrentes pendientes */}
-                {pendingIOwe.map(x => (
-                  <div key={x.id} className="flex justify-between items-center py-2 border-b last:border-0 gap-2">
-                    <p className="text-sm text-gray-800 truncate flex-1">{x.concept}</p>
-                    <span className="text-sm font-semibold text-red-500 shrink-0">{formatMXN(x.amount)}</span>
-                    <SettleInternalDebtButton
-                      recurringExpenseId={x.id}
-                      periodDate={nextPeriodStr}
-                      payer={myOwnership as 'lalo' | 'ale'}
-                      amount={x.amount}
-                    />
-                  </div>
-                ))}
-                {/* Deudas puntuales */}
-                {visibleDebtsOwed.map(d => (
-                  <div key={d.id} className="py-2 border-b last:border-0">
-                    <div className="flex justify-between items-start gap-2">
-                      <p className="text-sm text-gray-800 font-medium truncate flex-1">{d.concept}</p>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-sm font-semibold text-red-500">
-                          {d.total_installments ? formatMXN(d.amount * (d.total_installments - d.paid_installments)) : formatMXN(d.amount)}
-                        </span>
-                        <MarkDebtPaidButton
-                          debtId={d.id}
-                          totalInstallments={d.total_installments ?? null}
-                          paidInstallments={d.paid_installments ?? 0}
-                          dueDate={d.due_date ?? null}
-                          concept={d.concept}
-                          amount={d.amount}
+                {pendingIOwe.length > 0 && (
+                  <>
+                    {visibleDebtsOwed.length > 0 && (
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide pt-1 pb-0.5">Gastos casa</p>
+                    )}
+                    {pendingIOwe.map(x => (
+                      <div key={x.id} className="flex justify-between items-center py-2 border-b last:border-0 gap-2">
+                        <p className="text-sm text-gray-800 truncate flex-1">{x.concept}</p>
+                        <span className="text-sm font-semibold text-red-500 shrink-0">{formatMXN(x.amount)}</span>
+                        <SettleInternalDebtButton
+                          recurringExpenseId={x.id}
+                          periodDate={nextPeriodStr}
+                          payer={myOwnership as 'lalo' | 'ale'}
+                          amount={x.amount}
                         />
                       </div>
-                    </div>
-                    {d.total_installments && (
-                      <p className="text-xs text-purple-500 mt-0.5">
-                        {d.paid_installments}/{d.total_installments} cuotas · {formatMXN(d.amount)}/mes
-                      </p>
+                    ))}
+                  </>
+                )}
+                {visibleDebtsOwed.length > 0 && (
+                  <>
+                    {pendingIOwe.length > 0 && (
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide pt-2 pb-0.5">Gastos personales</p>
                     )}
-                    {d.due_date && (
-                      <p className={`text-xs mt-0.5 ${isOverdue(d.due_date) ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
-                        {isOverdue(d.due_date) ? '⚠ ' : ''}Vence {formatMXDate(d.due_date)}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                    {visibleDebtsOwed.map(d => (
+                      <div key={d.id} className="py-2 border-b last:border-0">
+                        <div className="flex justify-between items-start gap-2">
+                          <p className="text-sm text-gray-800 font-medium truncate flex-1">{d.concept}</p>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-sm font-semibold text-red-500">
+                              {d.total_installments ? formatMXN(d.amount * (d.total_installments - d.paid_installments)) : formatMXN(d.amount)}
+                            </span>
+                            <MarkDebtPaidButton
+                              debtId={d.id}
+                              totalInstallments={d.total_installments ?? null}
+                              paidInstallments={d.paid_installments ?? 0}
+                              dueDate={d.due_date ?? null}
+                              concept={d.concept}
+                              amount={d.amount}
+                            />
+                          </div>
+                        </div>
+                        {d.total_installments && (
+                          <p className="text-xs text-purple-500 mt-0.5">
+                            {d.paid_installments}/{d.total_installments} cuotas · {formatMXN(d.amount)}/mes
+                          </p>
+                        )}
+                        {d.due_date && (
+                          <p className={`text-xs mt-0.5 ${isOverdue(d.due_date) ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
+                            {isOverdue(d.due_date) ? '⚠ ' : ''}Vence {formatMXDate(d.due_date)}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
               {hiddenDebtsOwed > 0 && (
                 <a href="/shared" className="block text-xs text-gray-400 hover:text-gray-600 text-center pt-1">
@@ -573,20 +585,34 @@ export default async function DashboardPage({
               {(paidIOwe.length > 0 || paidOther.length > 0) && (
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Pagados</p>
-                  {paidIOwe.map(x => (
-                    <div key={x.id} className="flex justify-between items-center py-1.5 gap-2 text-gray-400">
-                      <p className="text-xs truncate flex-1 line-through">{x.concept}</p>
-                      <span className="text-xs shrink-0">{formatMXN(x.amount)}</span>
-                      <UnsettleInternalDebtButton settlementId={x.settlement.id} />
-                    </div>
-                  ))}
-                  {paidOther.map(p => (
-                    <div key={p.id} className="flex justify-between items-center py-1.5 gap-2 text-gray-400">
-                      <p className="text-xs truncate flex-1 line-through">{p.concept}</p>
-                      <span className="text-xs shrink-0">{formatMXN(p.amount)}</span>
-                      <DeletePeriodPaymentButton paymentId={p.id} />
-                    </div>
-                  ))}
+                  {paidIOwe.length > 0 && (
+                    <>
+                      {paidOther.length > 0 && (
+                        <p className="text-[10px] text-gray-300 uppercase tracking-wide mt-1 mb-0.5">Gastos casa</p>
+                      )}
+                      {paidIOwe.map(x => (
+                        <div key={x.id} className="flex justify-between items-center py-1.5 gap-2 text-gray-400">
+                          <p className="text-xs truncate flex-1 line-through">{x.concept}</p>
+                          <span className="text-xs shrink-0">{formatMXN(x.amount)}</span>
+                          <UnsettleInternalDebtButton settlementId={x.settlement.id} />
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {paidOther.length > 0 && (
+                    <>
+                      {paidIOwe.length > 0 && (
+                        <p className="text-[10px] text-gray-300 uppercase tracking-wide mt-2 mb-0.5">Gastos personales</p>
+                      )}
+                      {paidOther.map(p => (
+                        <div key={p.id} className="flex justify-between items-center py-1.5 gap-2 text-gray-400">
+                          <p className="text-xs truncate flex-1 line-through">{p.concept}</p>
+                          <span className="text-xs shrink-0">{formatMXN(p.amount)}</span>
+                          <DeletePeriodPaymentButton paymentId={p.id} />
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -602,37 +628,49 @@ export default async function DashboardPage({
                 </span>
               </div>
               <div className="space-y-0">
-                {/* Gastos recurrentes pendientes */}
-                {pendingOwesMe.map(x => (
-                  <div key={x.id} className="flex justify-between items-center py-2 border-b last:border-0">
-                    <p className="text-sm text-gray-800 truncate">{x.concept}</p>
-                    <span className="text-sm font-semibold text-green-600 shrink-0">{formatMXN(x.amount)}</span>
-                  </div>
-                ))}
-                {/* Deudas puntuales */}
-                {visibleDebtsToCollect.map(d => (
-                  <div key={d.id} className="py-2 border-b last:border-0">
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm text-gray-800 font-medium truncate">{d.concept}</p>
-                        <p className="text-xs text-gray-400">{(d as any).debtor?.display_name}</p>
+                {pendingOwesMe.length > 0 && (
+                  <>
+                    {visibleDebtsToCollect.length > 0 && (
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide pt-1 pb-0.5">Gastos casa</p>
+                    )}
+                    {pendingOwesMe.map(x => (
+                      <div key={x.id} className="flex justify-between items-center py-2 border-b last:border-0">
+                        <p className="text-sm text-gray-800 truncate">{x.concept}</p>
+                        <span className="text-sm font-semibold text-green-600 shrink-0">{formatMXN(x.amount)}</span>
                       </div>
-                      <span className="text-sm font-semibold text-green-600 shrink-0">
-                        {d.total_installments ? formatMXN(d.amount * (d.total_installments - d.paid_installments)) : formatMXN(d.amount)}
-                      </span>
-                    </div>
-                    {d.total_installments && (
-                      <p className="text-xs text-purple-500 mt-0.5">
-                        {d.paid_installments}/{d.total_installments} cuotas · {formatMXN(d.amount)}/mes
-                      </p>
+                    ))}
+                  </>
+                )}
+                {visibleDebtsToCollect.length > 0 && (
+                  <>
+                    {pendingOwesMe.length > 0 && (
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide pt-2 pb-0.5">Gastos personales</p>
                     )}
-                    {d.due_date && (
-                      <p className={`text-xs mt-0.5 ${isOverdue(d.due_date) ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
-                        {isOverdue(d.due_date) ? '⚠ ' : ''}Vence {formatMXDate(d.due_date)}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                    {visibleDebtsToCollect.map(d => (
+                      <div key={d.id} className="py-2 border-b last:border-0">
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm text-gray-800 font-medium truncate">{d.concept}</p>
+                            <p className="text-xs text-gray-400">{(d as any).debtor?.display_name}</p>
+                          </div>
+                          <span className="text-sm font-semibold text-green-600 shrink-0">
+                            {d.total_installments ? formatMXN(d.amount * (d.total_installments - d.paid_installments)) : formatMXN(d.amount)}
+                          </span>
+                        </div>
+                        {d.total_installments && (
+                          <p className="text-xs text-purple-500 mt-0.5">
+                            {d.paid_installments}/{d.total_installments} cuotas · {formatMXN(d.amount)}/mes
+                          </p>
+                        )}
+                        {d.due_date && (
+                          <p className={`text-xs mt-0.5 ${isOverdue(d.due_date) ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
+                            {isOverdue(d.due_date) ? '⚠ ' : ''}Vence {formatMXDate(d.due_date)}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
               {hiddenDebtsToCollect > 0 && (
                 <a href="/shared" className="block text-xs text-gray-400 hover:text-gray-600 text-center pt-1">
