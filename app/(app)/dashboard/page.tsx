@@ -283,6 +283,10 @@ export default async function DashboardPage({
   const totalOwed       = (debtsOwed      ?? []).filter(dueThisPeriod).reduce((sum, d) => sum + debtPending(d), 0)
   const totalToCollect  = (debtsToCollect ?? []).filter(dueThisPeriod).reduce((sum, d) => sum + debtPending(d), 0)
 
+  // Balance neto de esta quincena: lo que le debo menos lo que me debe.
+  // > 0  → yo le debo a la otra persona; < 0 → la otra persona me debe.
+  const netIOwe = (totalIOwe + totalOwed) - (totalOwesMe + totalToCollect)
+
   // Deudas de "me deben" agrupadas por tarjeta — solo las que vencen en esta quincena
   const debtsByCard = new Map<string, LinkedDebt[]>()
   for (const d of (debtsToCollect ?? []).filter(d => !d.due_date || d.due_date <= nextPeriodStr)) {
@@ -512,6 +516,25 @@ export default async function DashboardPage({
 
       {/* ── Cuentas con {otherName}: recurring shared + inter-person debts unificados ── */}
       {(internalIOwe.length > 0 || internalOwesMe.length > 0 || visibleDebtsOwed.length > 0 || visibleDebtsToCollect.length > 0) && (
+        <div className="space-y-3">
+        {/* Balance neto de esta quincena */}
+        <div className={`card p-4 flex items-center justify-between ${
+          Math.abs(netIOwe) < 0.01 ? 'bg-gray-50' : netIOwe > 0 ? 'bg-red-50' : 'bg-green-50'
+        }`}>
+          <span className="text-sm font-semibold text-gray-700">Balance neto</span>
+          {Math.abs(netIOwe) < 0.01 ? (
+            <span className="text-sm font-bold text-gray-600">Están a mano 🎉</span>
+          ) : netIOwe > 0 ? (
+            <span className="text-sm font-bold text-red-600">
+              Le debes a {otherName} {formatMXN(netIOwe)}
+            </span>
+          ) : (
+            <span className="text-sm font-bold text-green-700">
+              {otherName} te debe {formatMXN(-netIOwe)}
+            </span>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Le debo a {otherName} */}
           {(internalIOwe.length > 0 || visibleDebtsOwed.length > 0) && (
@@ -694,6 +717,7 @@ export default async function DashboardPage({
               )}
             </div>
           )}
+        </div>
         </div>
       )}
 
