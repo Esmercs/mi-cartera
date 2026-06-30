@@ -3,9 +3,9 @@ import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
 import { formatShortDate, getCurrentPeriodDates } from '@/lib/utils/date-utils'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
-import type { FunBudgetSummary, FunExpense } from '@/types/database'
+import type { FunBudgetSummary, FunExpense, FunBudgetPeriod } from '@/types/database'
 import AddFunExpenseForm from '@/components/diversion/add-fun-expense-form'
 import DeleteFunExpenseButton from '@/components/diversion/delete-fun-expense-button'
 import EditBudgetButton from '@/components/diversion/edit-budget-button'
@@ -73,6 +73,20 @@ export default async function DiversionPage() {
     .order('period_start', { ascending: false })
     .limit(5) as { data: FunBudgetSummary[] | null }
 
+  // Lista de quincenas para el selector (actual + anteriores)
+  const { data: allPeriods } = await supabase
+    .from('fun_budget_periods')
+    .select('id, period_start, period_end')
+    .order('period_start', { ascending: false })
+    .limit(24) as { data: Pick<FunBudgetPeriod, 'id' | 'period_start' | 'period_end'>[] | null }
+
+  const periodOptions = (allPeriods ?? []).map(p => ({
+    id:           p.id,
+    period_start: p.period_start,
+    period_end:   p.period_end,
+    label: `${format(parseISO(p.period_start), 'd MMM', { locale: es })} – ${format(parseISO(p.period_end), 'd MMM yyyy', { locale: es })}`,
+  }))
+
   const remaining   = summary?.remaining_budget ?? 0
   const spentPct    = summary?.spent_pct ?? 0
   const progressColor =
@@ -91,7 +105,7 @@ export default async function DiversionPage() {
             {format(end, "d MMM yyyy", { locale: es })} · Compartido
           </p>
         </div>
-        <AddFunExpenseForm budgetPeriodId={budgetPeriod?.id ?? ''} />
+        <AddFunExpenseForm budgetPeriodId={budgetPeriod?.id ?? ''} periods={periodOptions} />
       </div>
 
       {/* Header — mobile */}
@@ -99,7 +113,7 @@ export default async function DiversionPage() {
         <p className="text-xs text-gray-400">
           {format(start, "d MMM", { locale: es })} – {format(end, "d MMM", { locale: es })}
         </p>
-        <AddFunExpenseForm budgetPeriodId={budgetPeriod?.id ?? ''} />
+        <AddFunExpenseForm budgetPeriodId={budgetPeriod?.id ?? ''} periods={periodOptions} />
       </div>
 
       {/* Tarjeta principal */}

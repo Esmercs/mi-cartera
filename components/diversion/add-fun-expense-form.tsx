@@ -4,16 +4,31 @@ import { useRouter } from 'next/navigation'
 import { Plus, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
-export default function AddFunExpenseForm({ budgetPeriodId }: { budgetPeriodId: string }) {
+interface PeriodOption {
+  id: string
+  period_start: string
+  period_end: string
+  label: string
+}
+
+export default function AddFunExpenseForm({
+  budgetPeriodId,
+  periods = [],
+}: {
+  budgetPeriodId: string
+  periods?: PeriodOption[]
+}) {
   const router = useRouter()
   const supabase = createClient()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({ concept: '', amount: '', expense_date: '' })
+  const [periodId, setPeriodId] = useState(budgetPeriodId)
   const [loading, setLoading] = useState(false)
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
 
   async function openModal() {
+    setPeriodId(budgetPeriodId)
     // Cargar conceptos previos al abrir
     const { data } = await supabase
       .from('fun_expenses')
@@ -38,6 +53,8 @@ export default function AddFunExpenseForm({ budgetPeriodId }: { budgetPeriodId: 
     setShowSuggestions(false)
   }
 
+  const selectedPeriod = periods.find(p => p.id === periodId)
+
   const filtered = suggestions.filter(s =>
     s.toLowerCase().includes(form.concept.toLowerCase()) &&
     s.toLowerCase() !== form.concept.toLowerCase()
@@ -49,11 +66,17 @@ export default function AddFunExpenseForm({ budgetPeriodId }: { budgetPeriodId: 
 
     const { data: { user } } = await supabase.auth.getUser()
 
+    // Si no se indica fecha: hoy para la quincena actual, o el inicio del período elegido.
+    const isCurrent = periodId === budgetPeriodId
+    const fallbackDate = isCurrent
+      ? new Date().toISOString().split('T')[0]
+      : periods.find(p => p.id === periodId)?.period_start ?? new Date().toISOString().split('T')[0]
+
     await supabase.from('fun_expenses').insert({
-      budget_period_id: budgetPeriodId,
+      budget_period_id: periodId,
       concept:          form.concept,
       amount:           parseFloat(form.amount),
-      expense_date:     form.expense_date || new Date().toISOString().split('T')[0],
+      expense_date:     form.expense_date || fallbackDate,
       registered_by:    user?.id ?? null,
     })
 
@@ -75,6 +98,23 @@ export default function AddFunExpenseForm({ budgetPeriodId }: { budgetPeriodId: 
           <div className="card p-5 w-full max-w-sm space-y-4">
             <h3 className="font-semibold text-gray-800">Nuevo gasto de diversión</h3>
             <form onSubmit={handleSubmit} className="space-y-3">
+              {periods.length > 1 && (
+                <div>
+                  <label className="label">Quincena</label>
+                  <select
+                    className="input"
+                    value={periodId}
+                    onChange={e => setPeriodId(e.target.value)}
+                  >
+                    {periods.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}{p.id === budgetPeriodId ? ' (actual)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="relative">
                 <label className="label">Concepto</label>
                 <input
@@ -122,6 +162,8 @@ export default function AddFunExpenseForm({ budgetPeriodId }: { budgetPeriodId: 
                   className="input"
                   type="date"
                   value={form.expense_date}
+                  min={selectedPeriod?.period_start}
+                  max={selectedPeriod?.period_end}
                   onChange={e => setForm(p => ({ ...p, expense_date: e.target.value }))}
                 />
               </div>

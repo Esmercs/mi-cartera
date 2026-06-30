@@ -28,6 +28,7 @@ export default function EditDebtDialog({
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [cards, setCards] = useState<{ id: string; name: string }[]>([])
   const [form, setForm] = useState({
     concept,
@@ -50,6 +51,7 @@ export default function EditDebtDialog({
       card_id: cardId ?? '',
     })
     setConfirmDelete(false)
+    setError(null)
     setOpen(true)
   }
 
@@ -70,8 +72,22 @@ export default function EditDebtDialog({
 
   async function handleDelete() {
     setLoading(true)
-    await supabase.from('inter_person_debts').delete().eq('id', debtId)
+    setError(null)
+    const { data, error: delError } = await supabase
+      .from('inter_person_debts')
+      .delete()
+      .eq('id', debtId)
+      .select()
     setLoading(false)
+    if (delError) {
+      setError(delError.message)
+      return
+    }
+    if (!data || data.length === 0) {
+      // RLS no lanza error: borra 0 filas y devuelve data vacía.
+      setError('No se pudo eliminar la deuda (sin permisos). Falta aplicar la política de borrado en la base de datos.')
+      return
+    }
     setOpen(false)
     router.refresh()
   }
@@ -114,6 +130,9 @@ export default function EditDebtDialog({
                 <p className="text-sm text-gray-700">
                   ¿Eliminar <span className="font-semibold">{concept}</span>? Esta acción no se puede deshacer.
                 </p>
+                {error && (
+                  <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
+                )}
                 <div className="flex gap-2">
                   <button
                     onClick={handleDelete}
