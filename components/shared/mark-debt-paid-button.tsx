@@ -1,8 +1,9 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { formatMXN } from '@/lib/utils/currency'
+import ConfirmDialog from '@/components/shared/confirm-dialog'
 
 function addOneMonth(dateStr: string): string {
   const d = new Date(dateStr + 'T12:00:00')
@@ -29,16 +30,16 @@ export default function MarkDebtPaidButton({
   const router = useRouter()
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
 
   const isInstallment = totalInstallments !== null
   const remaining = isInstallment ? totalInstallments - paidInstallments : null
 
-  async function handlePay() {
-    const label = isInstallment
-      ? `¿Registrar cuota ${paidInstallments + 1} de ${totalInstallments}?`
-      : '¿Marcar esta deuda como pagada?'
-    if (!confirm(label)) return
+  const title = isInstallment
+    ? `Registrar cuota ${paidInstallments + 1} de ${totalInstallments}`
+    : 'Marcar deuda como pagada'
 
+  async function handlePay() {
     setLoading(true)
 
     const newPaid = isInstallment ? paidInstallments + 1 : null
@@ -84,30 +85,44 @@ export default function MarkDebtPaidButton({
     }
 
     setLoading(false)
+    setOpen(false)
     router.refresh()
   }
 
-  if (isInstallment) {
-    return (
-      <button
-        onClick={handlePay}
-        disabled={loading}
-        className="text-xs px-2 py-1 bg-green-50 text-green-700 border border-green-200
-                   rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50 whitespace-nowrap"
-      >
-        {loading ? <><Loader2 size={11} className="animate-spin inline mr-1" />Pagando...</> : `Pagar cuota (${remaining} restante${remaining === 1 ? '' : 's'})`}
-      </button>
-    )
-  }
-
   return (
-    <button
-      onClick={handlePay}
-      disabled={loading}
-      className="text-xs px-2 py-1 bg-green-50 text-green-700 border border-green-200
-                 rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50"
-    >
-      {loading ? <><Loader2 size={11} className="animate-spin inline mr-1" />Pagando...</> : 'Marcar pagada'}
-    </button>
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        disabled={loading}
+        className={`text-xs px-2 py-1 bg-green-50 text-green-700 border border-green-200
+                   rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50${isInstallment ? ' whitespace-nowrap' : ''}`}
+      >
+        {isInstallment
+          ? `Pagar cuota (${remaining} restante${remaining === 1 ? '' : 's'})`
+          : 'Marcar pagada'}
+      </button>
+
+      <ConfirmDialog
+        open={open}
+        title={title}
+        confirmLabel={isInstallment ? 'Registrar cuota' : 'Sí, marcar pagada'}
+        tone="success"
+        loading={loading}
+        onConfirm={handlePay}
+        onCancel={() => setOpen(false)}
+        message={isInstallment
+          ? 'Se registrará la cuota y la fecha de vencimiento avanzará un mes.'
+          : 'Esto marcará la deuda como pagada y la moverá a "Ya pagado".'}
+      >
+        {concept && (
+          <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+            <span className="text-sm text-gray-600 truncate mr-2">{concept}</span>
+            {amount != null && (
+              <span className="text-sm font-semibold text-gray-800 shrink-0">{formatMXN(amount)}</span>
+            )}
+          </div>
+        )}
+      </ConfirmDialog>
+    </>
   )
 }
