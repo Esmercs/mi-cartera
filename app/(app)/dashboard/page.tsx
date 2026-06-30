@@ -277,8 +277,11 @@ export default async function DashboardPage({
   const totalMSI = (installments ?? []).reduce((sum, p) => sum + p.monthly_amount, 0)
   const debtPending = (d: InterPersonDebt) =>
     d.total_installments ? d.amount * (d.total_installments - d.paid_installments) : d.amount
-  const totalOwed       = (debtsOwed      ?? []).reduce((sum, d) => sum + debtPending(d), 0)
-  const totalToCollect  = (debtsToCollect ?? []).reduce((sum, d) => sum + debtPending(d), 0)
+  // Solo cuenta lo que vence en esta quincena (sin fecha o due_date <= fin de quincena);
+  // las deudas con fecha posterior no se incluyen en el total ni en la lista.
+  const dueThisPeriod = (d: InterPersonDebt) => !d.due_date || d.due_date <= nextPeriodStr
+  const totalOwed       = (debtsOwed      ?? []).filter(dueThisPeriod).reduce((sum, d) => sum + debtPending(d), 0)
+  const totalToCollect  = (debtsToCollect ?? []).filter(dueThisPeriod).reduce((sum, d) => sum + debtPending(d), 0)
 
   // Deudas de "me deben" agrupadas por tarjeta — solo las que vencen en esta quincena
   const debtsByCard = new Map<string, LinkedDebt[]>()
@@ -320,12 +323,12 @@ export default async function DashboardPage({
     return a.due_date.localeCompare(b.due_date)
   }
   const visibleDebtsOwed = [...(debtsOwed ?? [])]
-    .filter(d => !d.due_date || d.due_date <= nextPeriodStr)
+    .filter(dueThisPeriod)
     .sort(sortByDueDate)
   const hiddenDebtsOwed = (debtsOwed ?? []).length - visibleDebtsOwed.length
 
   const visibleDebtsToCollect = [...(debtsToCollect ?? [])]
-    .filter(d => !d.due_date || d.due_date <= nextPeriodStr)
+    .filter(dueThisPeriod)
     .sort(sortByDueDate)
   const hiddenDebtsToCollect = (debtsToCollect ?? []).length - visibleDebtsToCollect.length
 
