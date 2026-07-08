@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Loader2 } from 'lucide-react'
+import { Plus, Loader2, Lock, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function AddProjectForm() {
@@ -14,6 +14,7 @@ export default function AddProjectForm() {
     due_date: '',
     notes: '',
   })
+  const [isShared, setIsShared] = useState(false)
   const [loading, setLoading] = useState(false)
 
   function set(field: string, value: string) {
@@ -22,6 +23,7 @@ export default function AddProjectForm() {
 
   function openModal() {
     setForm({ name: '', total_cost: '', due_date: '', notes: '' })
+    setIsShared(false)
     setOpen(true)
   }
 
@@ -37,6 +39,7 @@ export default function AddProjectForm() {
       total_cost: parseFloat(form.total_cost),
       due_date:   form.due_date || null,
       notes:      form.notes || null,
+      is_shared:  isShared,
     })
 
     setOpen(false)
@@ -79,6 +82,30 @@ export default function AddProjectForm() {
                 <input className="input" value={form.notes}
                   onChange={e => set('notes', e.target.value)}
                   placeholder="Detalles, a quién se paga, etc." />
+              </div>
+              <div>
+                <label className="label">Visibilidad</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setIsShared(false)}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-medium border transition-colors
+                      ${!isShared
+                        ? 'bg-brand-50 border-brand-500 text-brand-700'
+                        : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                    <Lock size={14} /> Privado
+                  </button>
+                  <button type="button" onClick={() => setIsShared(true)}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-medium border transition-colors
+                      ${isShared
+                        ? 'bg-brand-50 border-brand-500 text-brand-700'
+                        : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                    <Users size={14} /> Compartido
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  {isShared
+                    ? 'Ambos pueden verlo y registrar abonos.'
+                    : 'Solo tú puedes verlo.'}
+                </p>
               </div>
               <div className="flex gap-2 pt-1">
                 <button type="submit" disabled={loading} className="btn-primary flex-1 flex items-center justify-center gap-1.5">

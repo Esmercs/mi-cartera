@@ -11,11 +11,20 @@ export default async function ProyectosPage() {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) redirect('/login')
 
-  const { data: projects } = await supabase
-    .from('projects')
-    .select('*, project_payments(*)')
-    .eq('owner_id', session.user.id)
-    .order('due_date', { ascending: true, nullsFirst: false }) as { data: Project[] | null }
+  // RLS devuelve los propios + los compartidos
+  const [{ data: projects }, { data: profiles }] = await Promise.all([
+    supabase
+      .from('projects')
+      .select('*, project_payments(*)')
+      .order('due_date', { ascending: true, nullsFirst: false }),
+    supabase.from('profiles').select('id, display_name'),
+  ]) as [
+    { data: Project[] | null },
+    { data: { id: string; display_name: string | null }[] | null },
+  ]
+
+  const namesById: Record<string, string> = {}
+  for (const p of profiles ?? []) namesById[p.id] = p.display_name ?? '?'
 
   const paidOf = (p: Project) =>
     (p.project_payments ?? []).reduce((s, pay) => s + pay.amount, 0)
@@ -70,7 +79,14 @@ export default async function ProyectosPage() {
             </p>
           </div>
         ) : (
-          active.map(project => <ProjectCard key={project.id} project={project} />)
+          active.map(project => (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              currentUserId={session.user.id}
+              namesById={namesById}
+            />
+          ))
         )}
       </section>
 
@@ -80,7 +96,13 @@ export default async function ProyectosPage() {
           <h2 className="font-semibold text-gray-500 text-sm px-1">Completados</h2>
           <div className="space-y-3 opacity-70">
             {completed.map(project => (
-              <ProjectCard key={project.id} project={project} completed />
+              <ProjectCard
+                key={project.id}
+                project={project}
+                completed
+                currentUserId={session.user.id}
+                namesById={namesById}
+              />
             ))}
           </div>
         </section>

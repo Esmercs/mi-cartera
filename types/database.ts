@@ -195,6 +195,7 @@ export interface Project {
   due_date: string | null
   notes: string | null
   is_completed: boolean
+  is_shared: boolean
   created_at: string
   // joined
   project_payments?: ProjectPayment[]

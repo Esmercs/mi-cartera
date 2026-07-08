@@ -10,6 +10,7 @@ import {
   Trash2,
   CalendarDays,
   CheckCircle2,
+  Users,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatMXN } from '@/lib/utils/currency'
@@ -20,9 +21,16 @@ import type { Project, ProjectPayment } from '@/types/database'
 interface ProjectCardProps {
   project: Project
   completed?: boolean
+  currentUserId: string
+  namesById: Record<string, string>
 }
 
-export default function ProjectCard({ project, completed = false }: ProjectCardProps) {
+export default function ProjectCard({
+  project,
+  completed = false,
+  currentUserId,
+  namesById,
+}: ProjectCardProps) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -33,6 +41,7 @@ export default function ProjectCard({ project, completed = false }: ProjectCardP
   const remaining = Math.max(0, project.total_cost - paid)
   const pct       = project.total_cost > 0 ? Math.min(100, (paid / project.total_cost) * 100) : 0
   const overdue   = !completed && remaining > 0 && isOverdue(project.due_date)
+  const isOwner   = project.owner_id === currentUserId
 
   const [expanded, setExpanded] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
@@ -140,6 +149,11 @@ export default function ProjectCard({ project, completed = false }: ProjectCardP
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-gray-800 truncate">{project.name}</h3>
+            {project.is_shared && (
+              <span className="flex items-center gap-1 text-[10px] font-medium bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded shrink-0">
+                <Users size={10} /> Compartido
+              </span>
+            )}
             {(completed || remaining === 0) && (
               <CheckCircle2 size={16} className="text-green-600 shrink-0" />
             )}
@@ -193,10 +207,12 @@ export default function ProjectCard({ project, completed = false }: ProjectCardP
                   <Plus size={14} /> Registrar abono
                 </button>
               )}
-              <button onClick={() => setDeleteProjectOpen(true)}
-                className="text-xs font-medium text-gray-400 hover:text-red-600 flex items-center gap-1">
-                <Trash2 size={14} /> Eliminar
-              </button>
+              {isOwner && (
+                <button onClick={() => setDeleteProjectOpen(true)}
+                  className="text-xs font-medium text-gray-400 hover:text-red-600 flex items-center gap-1">
+                  <Trash2 size={14} /> Eliminar
+                </button>
+              )}
             </div>
           </div>
 
@@ -209,6 +225,11 @@ export default function ProjectCard({ project, completed = false }: ProjectCardP
                   className="flex items-center justify-between py-1.5 border-b last:border-0 text-sm gap-2">
                   <div className="min-w-0">
                     <span className="text-gray-700 font-medium">{formatMXN(payment.amount)}</span>
+                    {project.is_shared && (
+                      <span className="text-purple-600 ml-2 text-xs font-medium">
+                        {namesById[payment.owner_id] ?? '?'}
+                      </span>
+                    )}
                     <span className="text-gray-400 ml-2 text-xs">{formatMXDate(payment.paid_at)}</span>
                     {payment.notes && (
                       <span className="text-gray-400 ml-2 text-xs truncate">· {payment.notes}</span>
@@ -225,11 +246,13 @@ export default function ProjectCard({ project, completed = false }: ProjectCardP
                           : <Paperclip size={15} />}
                       </button>
                     )}
-                    <button onClick={() => setDeletePayment(payment)}
-                      title="Eliminar abono"
-                      className="text-gray-300 hover:text-red-600">
-                      <Trash2 size={15} />
-                    </button>
+                    {payment.owner_id === currentUserId && (
+                      <button onClick={() => setDeletePayment(payment)}
+                        title="Eliminar abono"
+                        className="text-gray-300 hover:text-red-600">
+                        <Trash2 size={15} />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
