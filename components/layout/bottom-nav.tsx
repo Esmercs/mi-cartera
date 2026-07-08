@@ -8,6 +8,7 @@ import {
   PartyPopper,
   Wallet,
   Users,
+  Target,
 } from 'lucide-react'
 
 const navItems = [
@@ -17,6 +18,7 @@ const navItems = [
   { href: '/financiamiento', label: 'MSI',        icon: CreditCard },
   { href: '/diversion',      label: 'Diversión',  icon: PartyPopper },
   { href: '/deudas',         label: 'Deudas',     icon: Wallet },
+  { href: '/proyectos',      label: 'Proyectos',  icon: Target },
 ]
 
 export default function BottomNav() {

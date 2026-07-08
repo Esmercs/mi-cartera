@@ -187,6 +187,30 @@ export interface InternalDebtSettlement {
   created_at: string
 }
 
+export interface Project {
+  id: string
+  owner_id: string
+  name: string
+  total_cost: number
+  due_date: string | null
+  notes: string | null
+  is_completed: boolean
+  created_at: string
+  // joined
+  project_payments?: ProjectPayment[]
+}
+
+export interface ProjectPayment {
+  id: string
+  project_id: string
+  owner_id: string
+  amount: number
+  paid_at: string
+  receipt_path: string | null
+  notes: string | null
+  created_at: string
+}
+
 export interface InterPersonDebt {
   id: string
   debtor_id: string

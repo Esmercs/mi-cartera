@@ -1,0 +1,90 @@
+export const dynamic = 'force-dynamic'
+import { createServerClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { formatMXN } from '@/lib/utils/currency'
+import type { Project } from '@/types/database'
+import AddProjectForm from '@/components/proyectos/add-project-form'
+import ProjectCard from '@/components/proyectos/project-card'
+
+export default async function ProyectosPage() {
+  const supabase = createServerClient()
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) redirect('/login')
+
+  const { data: projects } = await supabase
+    .from('projects')
+    .select('*, project_payments(*)')
+    .eq('owner_id', session.user.id)
+    .order('due_date', { ascending: true, nullsFirst: false }) as { data: Project[] | null }
+
+  const paidOf = (p: Project) =>
+    (p.project_payments ?? []).reduce((s, pay) => s + pay.amount, 0)
+
+  const active    = (projects ?? []).filter(p => !p.is_completed && paidOf(p) < p.total_cost)
+  const completed = (projects ?? []).filter(p => p.is_completed || paidOf(p) >= p.total_cost)
+
+  const totalCosto    = active.reduce((s, p) => s + p.total_cost, 0)
+  const totalAbonado  = active.reduce((s, p) => s + paidOf(p), 0)
+  const totalRestante = totalCosto - totalAbonado
+
+  return (
+    <div className="space-y-4 max-w-4xl">
+      {/* Header — desktop */}
+      <div className="hidden md:flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Proyectos</h1>
+          <p className="text-gray-500 text-sm mt-0.5">
+            Metas a futuro — presupuesto, abonos y comprobantes
+          </p>
+        </div>
+        <AddProjectForm />
+      </div>
+
+      {/* Header — mobile */}
+      <div className="flex items-center justify-end md:hidden">
+        <AddProjectForm />
+      </div>
+
+      {/* Resumen */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="card p-3 md:p-4 bg-blue-50">
+          <p className="text-xs text-blue-600 font-medium">Activos</p>
+          <p className="text-xl md:text-2xl font-bold text-blue-800 mt-1">{active.length}</p>
+        </div>
+        <div className="card p-3 md:p-4 bg-green-50">
+          <p className="text-xs text-green-600 font-medium truncate">Abonado</p>
+          <p className="text-base md:text-xl font-bold text-green-800 mt-1">{formatMXN(totalAbonado)}</p>
+        </div>
+        <div className="card p-3 md:p-4 bg-orange-50">
+          <p className="text-xs text-orange-600 font-medium truncate">Por pagar</p>
+          <p className="text-base md:text-xl font-bold text-orange-800 mt-1">{formatMXN(totalRestante)}</p>
+        </div>
+      </div>
+
+      {/* Proyectos activos */}
+      <section className="space-y-3">
+        {!active.length ? (
+          <div className="card p-5">
+            <p className="text-sm text-gray-400">
+              Sin proyectos activos. Crea uno con &quot;Nuevo proyecto&quot;.
+            </p>
+          </div>
+        ) : (
+          active.map(project => <ProjectCard key={project.id} project={project} />)
+        )}
+      </section>
+
+      {/* Proyectos completados */}
+      {completed.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="font-semibold text-gray-500 text-sm px-1">Completados</h2>
+          <div className="space-y-3 opacity-70">
+            {completed.map(project => (
+              <ProjectCard key={project.id} project={project} completed />
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  )
+}
