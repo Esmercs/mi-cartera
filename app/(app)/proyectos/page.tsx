@@ -1,10 +1,11 @@
 export const dynamic = 'force-dynamic'
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { formatMXN } from '@/lib/utils/currency'
 import type { Project } from '@/types/database'
 import AddProjectForm from '@/components/proyectos/add-project-form'
 import ProjectCard from '@/components/proyectos/project-card'
+import ProjectsSummary from '@/components/proyectos/projects-summary'
+import { PrivacyProvider, PrivacyToggle } from '@/components/proyectos/privacy-context'
 
 export default async function ProyectosPage() {
   const supabase = createServerClient()
@@ -35,8 +36,10 @@ export default async function ProyectosPage() {
   const totalCosto    = active.reduce((s, p) => s + p.total_cost, 0)
   const totalAbonado  = active.reduce((s, p) => s + paidOf(p), 0)
   const totalRestante = totalCosto - totalAbonado
+  const hasPrivate    = active.some(p => !p.is_shared)
 
   return (
+    <PrivacyProvider>
     <div className="space-y-4 max-w-4xl">
       {/* Header — desktop */}
       <div className="hidden md:flex items-start justify-between">
@@ -46,29 +49,25 @@ export default async function ProyectosPage() {
             Metas a futuro — presupuesto, abonos y comprobantes
           </p>
         </div>
-        <AddProjectForm />
+        <div className="flex items-center gap-2">
+          <PrivacyToggle />
+          <AddProjectForm />
+        </div>
       </div>
 
       {/* Header — mobile */}
-      <div className="flex items-center justify-end md:hidden">
+      <div className="flex items-center justify-end gap-2 md:hidden">
+        <PrivacyToggle />
         <AddProjectForm />
       </div>
 
       {/* Resumen */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="card p-3 md:p-4 bg-blue-50">
-          <p className="text-xs text-blue-600 font-medium">Activos</p>
-          <p className="text-xl md:text-2xl font-bold text-blue-800 mt-1">{active.length}</p>
-        </div>
-        <div className="card p-3 md:p-4 bg-green-50">
-          <p className="text-xs text-green-600 font-medium truncate">Abonado</p>
-          <p className="text-base md:text-xl font-bold text-green-800 mt-1">{formatMXN(totalAbonado)}</p>
-        </div>
-        <div className="card p-3 md:p-4 bg-orange-50">
-          <p className="text-xs text-orange-600 font-medium truncate">Por pagar</p>
-          <p className="text-base md:text-xl font-bold text-orange-800 mt-1">{formatMXN(totalRestante)}</p>
-        </div>
-      </div>
+      <ProjectsSummary
+        activeCount={active.length}
+        totalAbonado={totalAbonado}
+        totalRestante={totalRestante}
+        hasPrivate={hasPrivate}
+      />
 
       {/* Proyectos activos */}
       <section className="space-y-3">
@@ -108,5 +107,6 @@ export default async function ProyectosPage() {
         </section>
       )}
     </div>
+    </PrivacyProvider>
   )
 }

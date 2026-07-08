@@ -18,6 +18,7 @@ import { createClient } from '@/lib/supabase/client'
 import { formatMXN } from '@/lib/utils/currency'
 import { formatMXDate, isOverdue } from '@/lib/utils/date-utils'
 import ConfirmDialog from '@/components/shared/confirm-dialog'
+import { usePrivacy, MASKED } from './privacy-context'
 import type { Project, ProjectPayment } from '@/types/database'
 
 interface ProjectCardProps {
@@ -44,6 +45,10 @@ export default function ProjectCard({
   const pct       = project.total_cost > 0 ? Math.min(100, (paid / project.total_cost) * 100) : 0
   const overdue   = !completed && remaining > 0 && isOverdue(project.due_date)
   const isOwner   = project.owner_id === currentUserId
+
+  const { hidden } = usePrivacy()
+  const mask = hidden && !project.is_shared
+  const money = (amount: number) => (mask ? MASKED : formatMXN(amount))
 
   const [expanded, setExpanded] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
@@ -213,9 +218,9 @@ export default function ProjectCard({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <div className="text-right">
-            <p className="text-sm font-bold text-gray-800">{formatMXN(project.total_cost)}</p>
+            <p className="text-sm font-bold text-gray-800">{money(project.total_cost)}</p>
             <p className={`text-xs ${remaining === 0 ? 'text-green-600' : 'text-orange-600'} font-medium`}>
-              {remaining === 0 ? 'Pagado' : `Faltan ${formatMXN(remaining)}`}
+              {remaining === 0 ? 'Pagado' : `Faltan ${money(remaining)}`}
             </p>
           </div>
           {expanded ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
@@ -231,7 +236,7 @@ export default function ProjectCard({
           />
         </div>
         <div className="flex justify-between mt-1 text-xs text-gray-400">
-          <span>Abonado: <span className="text-green-600 font-medium">{formatMXN(paid)}</span></span>
+          <span>Abonado: <span className="text-green-600 font-medium">{money(paid)}</span></span>
           <span>{pct.toFixed(0)}%</span>
         </div>
       </div>
@@ -273,7 +278,7 @@ export default function ProjectCard({
                 <div key={payment.id}
                   className="flex items-center justify-between py-1.5 border-b last:border-0 text-sm gap-2">
                   <div className="min-w-0">
-                    <span className="text-gray-700 font-medium">{formatMXN(payment.amount)}</span>
+                    <span className="text-gray-700 font-medium">{money(payment.amount)}</span>
                     {project.is_shared && (
                       <span className="text-purple-600 ml-2 text-xs font-medium">
                         {namesById[payment.owner_id] ?? '?'}
