@@ -11,6 +11,8 @@ import {
   CalendarDays,
   CheckCircle2,
   Users,
+  Lock,
+  Pencil,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatMXN } from '@/lib/utils/currency'
@@ -53,6 +55,47 @@ export default function ProjectCard({
   const [deletePayment, setDeletePayment] = useState<ProjectPayment | null>(null)
   const [deleteProjectOpen, setDeleteProjectOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [editForm, setEditForm] = useState({ name: '', total_cost: '', due_date: '', notes: '' })
+  const [editShared, setEditShared] = useState(false)
+
+  function openEdit() {
+    setEditForm({
+      name:       project.name,
+      total_cost: String(project.total_cost),
+      due_date:   project.due_date ?? '',
+      notes:      project.notes ?? '',
+    })
+    setEditShared(!!project.is_shared)
+    setError(null)
+    setEditOpen(true)
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+
+    const { error: updateError } = await supabase.from('projects')
+      .update({
+        name:       editForm.name,
+        total_cost: parseFloat(editForm.total_cost),
+        due_date:   editForm.due_date || null,
+        notes:      editForm.notes || null,
+        is_shared:  editShared,
+      })
+      .eq('id', project.id)
+
+    if (updateError) {
+      setError('No se pudo guardar: ' + updateError.message)
+      setSaving(false)
+      return
+    }
+
+    setEditOpen(false)
+    setSaving(false)
+    router.refresh()
+  }
 
   function openAddPayment() {
     setPayForm({ amount: '', paid_at: new Date().toISOString().slice(0, 10), notes: '' })
@@ -208,10 +251,16 @@ export default function ProjectCard({
                 </button>
               )}
               {isOwner && (
-                <button onClick={() => setDeleteProjectOpen(true)}
-                  className="text-xs font-medium text-gray-400 hover:text-red-600 flex items-center gap-1">
-                  <Trash2 size={14} /> Eliminar
-                </button>
+                <>
+                  <button onClick={openEdit}
+                    className="text-xs font-medium text-gray-500 hover:text-brand-700 flex items-center gap-1">
+                    <Pencil size={14} /> Editar
+                  </button>
+                  <button onClick={() => setDeleteProjectOpen(true)}
+                    className="text-xs font-medium text-gray-400 hover:text-red-600 flex items-center gap-1">
+                    <Trash2 size={14} /> Eliminar
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -258,6 +307,73 @@ export default function ProjectCard({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Modal editar proyecto */}
+      {editOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="card p-5 w-full max-w-sm space-y-4">
+            <h3 className="font-semibold text-gray-800">Editar proyecto</h3>
+            <form onSubmit={handleEdit} className="space-y-3">
+              <div>
+                <label className="label">Nombre</label>
+                <input className="input" value={editForm.name}
+                  onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} required />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Costo total</label>
+                  <input className="input" type="number" step="0.01" min="0.01"
+                    value={editForm.total_cost}
+                    onChange={e => setEditForm(f => ({ ...f, total_cost: e.target.value }))} required />
+                </div>
+                <div>
+                  <label className="label">Fecha límite</label>
+                  <input className="input" type="date" value={editForm.due_date}
+                    onChange={e => setEditForm(f => ({ ...f, due_date: e.target.value }))} />
+                </div>
+              </div>
+              <div>
+                <label className="label">Notas (opcional)</label>
+                <input className="input" value={editForm.notes}
+                  onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">Visibilidad</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setEditShared(false)}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-medium border transition-colors
+                      ${!editShared
+                        ? 'bg-brand-50 border-brand-500 text-brand-700'
+                        : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                    <Lock size={14} /> Privado
+                  </button>
+                  <button type="button" onClick={() => setEditShared(true)}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-medium border transition-colors
+                      ${editShared
+                        ? 'bg-brand-50 border-brand-500 text-brand-700'
+                        : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                    <Users size={14} /> Compartido
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  {editShared
+                    ? 'Ambos pueden verlo y registrar abonos.'
+                    : 'Solo tú puedes verlo.'}
+                </p>
+              </div>
+              {error && <p className="text-xs text-red-600">{error}</p>}
+              <div className="flex gap-2 pt-1">
+                <button type="submit" disabled={saving} className="btn-primary flex-1 flex items-center justify-center gap-1.5">
+                  {saving && <Loader2 size={14} className="animate-spin" />}{saving ? 'Guardando...' : 'Guardar'}
+                </button>
+                <button type="button" onClick={() => setEditOpen(false)} className="btn-ghost flex-1">
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
