@@ -6,6 +6,7 @@ import { formatMXDate, isOverdue } from '@/lib/utils/date-utils'
 import type { InstallmentPlan } from '@/types/database'
 import RegisterPaymentButton from './register-payment-button'
 import EditInstallmentForm from './edit-installment-form'
+import DeleteInstallmentButton from './delete-installment-button'
 
 type Plan = InstallmentPlan & { cards?: { name: string } | null }
 
@@ -48,6 +49,7 @@ function InstallmentCard({ plan }: { plan: Plan }) {
         </p>
         <div className="flex items-center gap-2">
           <EditInstallmentForm plan={plan} />
+          <DeleteInstallmentButton id={plan.id} concept={plan.concept} />
           <RegisterPaymentButton planId={plan.id} monthlyAmount={plan.monthly_amount} cardId={plan.card_id ?? null} />
         </div>
       </div>

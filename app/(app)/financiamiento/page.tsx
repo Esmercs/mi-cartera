@@ -5,6 +5,7 @@ import { formatMXN } from '@/lib/utils/currency'
 import type { InstallmentPlan } from '@/types/database'
 import AddInstallmentForm from '@/components/financiamiento/add-installment-form'
 import CollapsibleCardGroup from '@/components/financiamiento/collapsible-card-group'
+import DeleteInstallmentButton from '@/components/financiamiento/delete-installment-button'
 
 export default async function FinanciamientoPage() {
   const supabase = createServerClient()
@@ -99,9 +100,12 @@ export default async function FinanciamientoPage() {
                   <span className="font-medium text-gray-700">{plan.concept}</span>
                   <span className="text-gray-400 ml-2">({plan.cards?.name ?? '—'})</span>
                 </div>
-                <span className="text-gray-400">
-                  {plan.total_months} meses · {formatMXN(plan.monthly_amount)}/mes
-                </span>
+                <div className="flex items-center gap-1">
+                  <span className="text-gray-400">
+                    {plan.total_months} meses · {formatMXN(plan.monthly_amount)}/mes
+                  </span>
+                  <DeleteInstallmentButton id={plan.id} concept={plan.concept} />
+                </div>
               </div>
             ))}
           </div>
