@@ -289,8 +289,9 @@ export default async function DashboardPage({
   }
 
   const totalMSI = (installments ?? []).reduce((sum, p) => sum + p.monthly_amount, 0)
-  const debtPending = (d: InterPersonDebt) =>
-    d.total_installments ? d.amount * (d.total_installments - d.paid_installments) : d.amount
+  // Lo que pesa en la quincena: para deudas a cuotas solo una mensualidad (d.amount);
+  // para deudas sin cuotas, d.amount ya es el total
+  const debtPending = (d: InterPersonDebt) => d.amount
   // Solo cuenta lo que vence en esta quincena (sin fecha o due_date <= fin de quincena);
   // las deudas con fecha posterior no se incluyen en el total ni en la lista.
   const dueThisPeriod = (d: InterPersonDebt) => !d.due_date || d.due_date <= nextPeriodStr
@@ -586,7 +587,7 @@ export default async function DashboardPage({
                           <p className="text-sm text-gray-800 font-medium truncate flex-1">{d.concept}</p>
                           <div className="flex items-center gap-2 shrink-0">
                             <span className="text-sm font-semibold text-red-500">
-                              {d.total_installments ? formatMXN(d.amount * (d.total_installments - d.paid_installments)) : formatMXN(d.amount)}
+                              {formatMXN(d.amount)}
                             </span>
                             <MarkDebtPaidButton
                               debtId={d.id}
@@ -600,7 +601,7 @@ export default async function DashboardPage({
                         </div>
                         {d.total_installments && (
                           <p className="text-xs text-purple-500 mt-0.5">
-                            {d.paid_installments}/{d.total_installments} cuotas · {formatMXN(d.amount)}/mes
+                            {d.paid_installments}/{d.total_installments} cuotas · restan {formatMXN(d.amount * (d.total_installments! - d.paid_installments))}
                           </p>
                         )}
                         {d.due_date && (
@@ -690,12 +691,12 @@ export default async function DashboardPage({
                             <p className="text-xs text-gray-400">{(d as any).debtor?.display_name}</p>
                           </div>
                           <span className="text-sm font-semibold text-green-600 shrink-0">
-                            {d.total_installments ? formatMXN(d.amount * (d.total_installments - d.paid_installments)) : formatMXN(d.amount)}
+                            {formatMXN(d.amount)}
                           </span>
                         </div>
                         {d.total_installments && (
                           <p className="text-xs text-purple-500 mt-0.5">
-                            {d.paid_installments}/{d.total_installments} cuotas · {formatMXN(d.amount)}/mes
+                            {d.paid_installments}/{d.total_installments} cuotas · restan {formatMXN(d.amount * (d.total_installments! - d.paid_installments))}
                           </p>
                         )}
                         {d.due_date && (
