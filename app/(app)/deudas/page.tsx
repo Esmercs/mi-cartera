@@ -9,6 +9,7 @@ import type { Card, ScheduledPayment } from '@/types/database'
 import AddScheduledPaymentForm from '@/components/deudas/add-scheduled-payment-form'
 import PayScheduledButton from '@/components/deudas/pay-scheduled-button'
 import DeleteScheduledButton from '@/components/deudas/delete-scheduled-button'
+import EditScheduledButton from '@/components/deudas/edit-scheduled-button'
 import UpdateCardBalanceForm from '@/components/deudas/update-card-balance-form'
 import AddCardForm from '@/components/deudas/add-card-form'
 import DeleteCardButton from '@/components/deudas/delete-card-button'
@@ -216,6 +217,15 @@ export default async function DeudasPage() {
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-sm font-bold text-gray-800">{formatMXN(p.amount)}</span>
+                        <EditScheduledButton
+                          id={p.id}
+                          concept={p.concept}
+                          amount={p.amount}
+                          cardId={p.card_id}
+                          paymentType={p.payment_type}
+                          periodDate={p.period_date}
+                          notes={p.notes}
+                        />
                         <PayScheduledButton
                           paymentId={p.id}
                           concept={p.concept}
