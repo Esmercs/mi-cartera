@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
-import { formatShortDate, getCurrentPeriodDates } from '@/lib/utils/date-utils'
+import { formatShortDate, getOffsetPeriodDates } from '@/lib/utils/date-utils'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import type { FunBudgetSummary, FunExpense, FunBudgetPeriod } from '@/types/database'
@@ -10,24 +10,31 @@ import AddFunExpenseForm from '@/components/diversion/add-fun-expense-form'
 import DeleteFunExpenseButton from '@/components/diversion/delete-fun-expense-button'
 import EditBudgetButton from '@/components/diversion/edit-budget-button'
 import ExpandableHistoryRow from '@/components/diversion/expandable-history-row'
+import PeriodSelector from '@/components/shared/period-selector'
 
-export default async function DiversionPage() {
+export default async function DiversionPage({
+  searchParams,
+}: {
+  searchParams: { p?: string }
+}) {
   const supabase = createServerClient()
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) redirect('/login')
 
-  const { start, end } = getCurrentPeriodDates()
+  // Quincena seleccionada (p=0 = actual, p=-1 = anterior, ...) — solo actual y pasadas
+  const periodOffset = Math.min(0, parseInt(searchParams.p ?? '0') || 0)
+  const { start, end } = getOffsetPeriodDates(periodOffset)
   const startStr = format(start, 'yyyy-MM-dd')
   const endStr   = format(end, 'yyyy-MM-dd')
 
-  // Buscar o crear el período de diversión actual
+  // Buscar el período de diversión seleccionado (solo se crea el actual)
   let { data: budgetPeriod } = await supabase
     .from('fun_budget_periods')
     .select('*')
     .eq('period_start', startStr)
     .single()
 
-  if (!budgetPeriod) {
+  if (!budgetPeriod && periodOffset === 0) {
     // Tomar el presupuesto del último período
     const { data: lastPeriod } = await supabase
       .from('fun_budget_periods')
@@ -69,7 +76,7 @@ export default async function DiversionPage() {
   const { data: history } = await supabase
     .from('fun_budget_summary')
     .select('*')
-    .neq('id', budgetPeriod?.id ?? '')
+    .neq('id', budgetPeriod?.id ?? '00000000-0000-0000-0000-000000000000')
     .order('period_start', { ascending: false })
     .limit(5) as { data: FunBudgetSummary[] | null }
 
@@ -100,22 +107,35 @@ export default async function DiversionPage() {
       <div className="hidden md:flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Gastos Diversión</h1>
-          <p className="text-gray-500 text-sm mt-0.5">
-            Quincena {format(start, "d MMM", { locale: es })} –{' '}
-            {format(end, "d MMM yyyy", { locale: es })} · Compartido
-          </p>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="text-gray-500 text-sm">Quincena</span>
+            <PeriodSelector
+              offset={periodOffset}
+              label={`${format(start, 'd MMM', { locale: es })} – ${format(end, 'd MMM yyyy', { locale: es })}`}
+              maxOffset={0}
+            />
+          </div>
         </div>
         <AddFunExpenseForm budgetPeriodId={budgetPeriod?.id ?? ''} periods={periodOptions} />
       </div>
 
       {/* Header — mobile */}
       <div className="flex items-center justify-between md:hidden">
-        <p className="text-xs text-gray-400">
-          {format(start, "d MMM", { locale: es })} – {format(end, "d MMM", { locale: es })}
-        </p>
+        <PeriodSelector
+          offset={periodOffset}
+          label={`${format(start, 'd MMM', { locale: es })} – ${format(end, 'd MMM', { locale: es })}`}
+          maxOffset={0}
+        />
         <AddFunExpenseForm budgetPeriodId={budgetPeriod?.id ?? ''} periods={periodOptions} />
       </div>
 
+      {/* Sin datos en quincena pasada */}
+      {!budgetPeriod && periodOffset < 0 ? (
+        <div className="card p-6 text-center">
+          <p className="text-sm text-gray-400">Sin datos de diversión en esa quincena.</p>
+        </div>
+      ) : (
+      <>
       {/* Tarjeta principal */}
       <div className="card p-6 space-y-4">
         <div className="flex items-start justify-between">
@@ -156,7 +176,7 @@ export default async function DiversionPage() {
       {/* Lista de gastos */}
       <div className="card p-5 space-y-4">
         <h2 className="font-semibold text-gray-800">
-          Gastos de esta quincena
+          {periodOffset === 0 ? 'Gastos de esta quincena' : 'Gastos de esa quincena'}
           {(expenses?.length ?? 0) > 0 && (
             <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
               {expenses?.length}
@@ -165,7 +185,7 @@ export default async function DiversionPage() {
         </h2>
 
         {!expenses?.length ? (
-          <p className="text-sm text-gray-400">Sin gastos registrados esta quincena.</p>
+          <p className="text-sm text-gray-400">Sin gastos registrados en la quincena.</p>
         ) : (
           <div className="space-y-2">
             {expenses.map(expense => (
@@ -195,6 +215,8 @@ export default async function DiversionPage() {
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* Historial */}
       {(history?.length ?? 0) > 0 && (

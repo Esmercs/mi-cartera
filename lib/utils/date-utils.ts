@@ -84,7 +84,7 @@ export function getCurrentPeriodDates(): { start: Date; end: Date; label: string
   }
 }
 
-// Returns period dates for the Nth quincena (0 = current, 1 = next, etc.)
+// Returns period dates for the Nth quincena (0 = current, 1 = next, -1 = previous, etc.)
 export function getOffsetPeriodDates(offset: number): {
   start: Date; end: Date; label: string; payDay: 15 | 30
 } {
@@ -117,6 +117,17 @@ export function getOffsetPeriodDates(offset: number): {
     } else {
       // A → B: starts on lastDay of m
       isB = true
+    }
+  }
+
+  for (let i = 0; i > offset; i--) {
+    if (isB) {
+      // B(m) ← A(m): la quincena A del mismo mes precede a la B
+      isB = false
+    } else {
+      // A(m) ← B(m-1): antes de la A viene la B que inició el mes anterior
+      isB = true
+      m--; if (m < 0) { m = 11; y-- }
     }
   }
 

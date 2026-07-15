@@ -15,7 +15,7 @@ import AddIncomeForm from '@/components/dashboard/add-income-form'
 import RegisterNextPaymentButton from '@/components/dashboard/register-next-payment-button'
 import CollapsibleCardGroup, { type LinkedDebt } from '@/components/dashboard/collapsible-card-group'
 import MarkDebtPaidButton from '@/components/shared/mark-debt-paid-button'
-import PeriodNavButton from '@/components/dashboard/period-nav-button'
+import PeriodSelector from '@/components/shared/period-selector'
 
 export default async function DashboardPage({
   searchParams,
@@ -68,11 +68,25 @@ export default async function DashboardPage({
     period = newPeriod
   }
 
-  // Próxima quincena — offset navegable (p=0 = quincena actual, p=1 = siguiente, etc.)
-  const periodOffset = Math.max(0, parseInt(searchParams.p ?? '0') || 0)
+  // Quincena seleccionada — offset navegable (p=0 = actual, p=1 = siguiente, p=-1 = anterior, etc.)
+  const periodOffset = parseInt(searchParams.p ?? '0') || 0
   const { start: nextStart, end: nextEnd, label: nextLabel, payDay: nextPayDay } = getOffsetPeriodDates(periodOffset)
   const nextPeriodStr = format(nextEnd, 'yyyy-MM-dd')
   const nextStartStr  = format(nextStart, 'yyyy-MM-dd')
+
+  // Período visible: para quincenas pasadas se consulta su registro (solo lectura, no se crea);
+  // para la actual y futuras se usa el período actual (comportamiento de siempre)
+  let viewPeriod = period
+  if (periodOffset < 0) {
+    const { data: pastPeriod } = await supabase
+      .from('periods')
+      .select('*')
+      .eq('owner_id', userId)
+      .eq('period_date', nextPeriodStr)
+      .single()
+    viewPeriod = pastPeriod
+  }
+  const activePeriodId = (viewPeriod ?? period)?.id ?? ''
 
   const todayStr = format(new Date(), 'yyyy-MM-dd')
 
@@ -90,8 +104,8 @@ export default async function DashboardPage({
     { data: nextDebts },
     { data: allProjections },
   ] = await Promise.all([
-    supabase.from('period_summary').select('*').eq('id', period?.id).single() as Promise<{ data: PeriodSummary | null }>,
-    supabase.from('period_payments').select('*, cards(name)').eq('period_id', period?.id ?? '').order('paid_at', { ascending: false }),
+    supabase.from('period_summary').select('*').eq('id', viewPeriod?.id).single() as Promise<{ data: PeriodSummary | null }>,
+    supabase.from('period_payments').select('*, cards(name)').eq('period_id', viewPeriod?.id ?? '').order('paid_at', { ascending: false }),
     supabase.from('installment_plans').select('*, cards(name)').eq('owner_id', userId).eq('is_active', true).order('next_payment_date', { ascending: true }) as Promise<{ data: InstallmentPlan[] | null }>,
     supabase.from('inter_person_debts').select('*, creditor:profiles!creditor_id(display_name, full_name)').eq('debtor_id', userId).eq('is_paid', false) as Promise<{ data: InterPersonDebt[] | null }>,
     supabase.from('inter_person_debts').select('*, debtor:profiles!debtor_id(display_name, full_name), cards(name)').eq('creditor_id', userId).eq('is_paid', false) as Promise<{ data: InterPersonDebt[] | null }>,
@@ -348,7 +362,7 @@ export default async function DashboardPage({
         <div>
           <h1 className="text-xl font-bold text-gray-900 hidden md:block">Mi Dashboard</h1>
           <p className="text-sm text-gray-400 mt-0.5">
-            {format(start, "d 'de' MMMM", { locale: es })} – {format(end, "d 'de' MMMM yyyy", { locale: es })}
+            {format(nextStart, "d 'de' MMMM", { locale: es })} – {format(nextEnd, "d 'de' MMMM yyyy", { locale: es })}
           </p>
         </div>
         <AddIncomeForm currentAmount={currentIncome?.amount ?? 0} />
@@ -412,13 +426,9 @@ export default async function DashboardPage({
       {/* ── Esta quincena — header de navegación ── */}
       <div className="flex items-center gap-2 px-1">
         <h2 className="font-semibold text-gray-700 text-sm">
-          {periodOffset === 0 ? 'Esta quincena' : 'Próxima quincena'}
+          {periodOffset === 0 ? 'Esta quincena' : periodOffset > 0 ? 'Próxima quincena' : 'Quincena pasada'}
         </h2>
-        <div className="flex items-center gap-1">
-          {periodOffset > 0 && <PeriodNavButton offset={periodOffset - 1} label="‹" />}
-          <span className="text-xs text-gray-400 font-medium">{nextLabel}</span>
-          <PeriodNavButton offset={periodOffset + 1} label="›" />
-        </div>
+        <PeriodSelector offset={periodOffset} label={nextLabel} />
         {nextItems.length > 0 && (
           <span className="ml-auto text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">
             {formatMXN(nextItems.reduce((s, i) => s + i.amount, 0))}
@@ -440,7 +450,7 @@ export default async function DashboardPage({
                   cardId={group.cardId}
                   cardName={group.cardName}
                   items={group.items}
-                  periodId={period?.id ?? ''}
+                  periodId={activePeriodId}
                   linkedDebts={debtsByCard.get(group.cardId)}
                 />
               ))}
@@ -483,7 +493,7 @@ export default async function DashboardPage({
                         />
                       ) : (
                         <RegisterNextPaymentButton
-                          periodId={period?.id ?? ''}
+                          periodId={activePeriodId}
                           concept={item.concept}
                           amount={item.amount}
                           cardId={item.cardId}
@@ -724,12 +734,14 @@ export default async function DashboardPage({
       {/* ── Pagos registrados de la quincena (agrupados) ── */}
       <div className="card p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-gray-800 text-sm">Ya pagado esta quincena</h2>
+          <h2 className="font-semibold text-gray-800 text-sm">
+            {periodOffset < 0 ? `Pagado · ${nextLabel}` : 'Ya pagado esta quincena'}
+          </h2>
           <div className="flex items-center gap-2">
             {totalPagado > 0 && (
               <span className="text-xs font-semibold text-gray-500">{formatMXN(totalPagado)}</span>
             )}
-            <AddPeriodPaymentForm periodId={period?.id ?? ''} />
+            <AddPeriodPaymentForm periodId={activePeriodId} />
           </div>
         </div>
 
