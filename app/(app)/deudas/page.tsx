@@ -232,7 +232,7 @@ export default async function DeudasPage() {
                           amount={p.amount}
                           cardId={p.card_id}
                         />
-                        <DeleteScheduledButton id={p.id} />
+                        <DeleteScheduledButton id={p.id} cardId={p.card_id} amount={p.amount} isPaid={false} />
                       </div>
                     </div>
                   ))}
@@ -247,7 +247,7 @@ export default async function DeudasPage() {
                       <p className="text-sm text-gray-500 line-through truncate flex-1">{p.concept}</p>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-sm text-gray-400 line-through">{formatMXN(p.amount)}</span>
-                        <DeleteScheduledButton id={p.id} />
+                        <DeleteScheduledButton id={p.id} isPaid={true} />
                       </div>
                     </div>
                   ))}

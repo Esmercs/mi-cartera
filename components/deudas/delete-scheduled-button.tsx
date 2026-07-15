@@ -5,7 +5,14 @@ import { Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import ConfirmDialog from '@/components/shared/confirm-dialog'
 
-export default function DeleteScheduledButton({ id }: { id: string }) {
+interface Props {
+  id: string
+  cardId?: string | null
+  amount?: number
+  isPaid?: boolean
+}
+
+export default function DeleteScheduledButton({ id, cardId, amount, isPaid }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
@@ -14,6 +21,17 @@ export default function DeleteScheduledButton({ id }: { id: string }) {
   async function handleDelete() {
     setLoading(true)
     await supabase.from('scheduled_payments').delete().eq('id', id)
+
+    // Si estaba pendiente y cargado a una tarjeta, retirar el cargo del saldo.
+    // Los ya pagados no se tocan: su descuento ocurrió al pagar.
+    if (!isPaid && cardId && amount) {
+      const { data: card } = await supabase
+        .from('cards').select('current_balance').eq('id', cardId).single()
+      await supabase.from('cards')
+        .update({ current_balance: Math.max(0, (card?.current_balance ?? 0) - amount) })
+        .eq('id', cardId)
+    }
+
     setLoading(false)
     setOpen(false)
     router.refresh()

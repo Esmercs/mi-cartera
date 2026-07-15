@@ -49,15 +49,25 @@ export default function AddScheduledPaymentForm({ defaultPeriodDate }: Props) {
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
 
+    const amount = parseFloat(form.amount)
     await supabase.from('scheduled_payments').insert({
       owner_id:     user!.id,
       concept:      form.concept,
-      amount:       parseFloat(form.amount),
+      amount,
       card_id:      form.card_id || null,
       payment_type: form.payment_type,
       period_date:  form.period_date,
       notes:        form.notes || null,
     })
+
+    // El cargo ya vive en la tarjeta: se suma al saldo (y se descuenta al pagar)
+    if (form.card_id) {
+      const { data: card } = await supabase
+        .from('cards').select('current_balance').eq('id', form.card_id).single()
+      await supabase.from('cards')
+        .update({ current_balance: (card?.current_balance ?? 0) + amount })
+        .eq('id', form.card_id)
+    }
 
     setOpen(false)
     setLoading(false)

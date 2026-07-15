@@ -56,18 +56,37 @@ export default function EditScheduledButton({ id, concept, amount, cardId, payme
     setForm(prev => ({ ...prev, [field]: value }))
   }
 
+  async function adjustCardBalance(targetCardId: string, delta: number) {
+    const { data: card } = await supabase
+      .from('cards').select('current_balance').eq('id', targetCardId).single()
+    await supabase.from('cards')
+      .update({ current_balance: Math.max(0, (card?.current_balance ?? 0) + delta) })
+      .eq('id', targetCardId)
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
 
+    const newAmount = parseFloat(form.amount)
+    const newCardId = form.card_id || null
+
     await supabase.from('scheduled_payments').update({
       concept:      form.concept,
-      amount:       parseFloat(form.amount),
-      card_id:      form.card_id || null,
+      amount:       newAmount,
+      card_id:      newCardId,
       payment_type: form.payment_type,
       period_date:  form.period_date,
       notes:        form.notes || null,
     }).eq('id', id)
+
+    // Mantener el saldo de tarjetas en sincronía con el cargo programado
+    if (cardId === newCardId) {
+      if (cardId && newAmount !== amount) await adjustCardBalance(cardId, newAmount - amount)
+    } else {
+      if (cardId) await adjustCardBalance(cardId, -amount)
+      if (newCardId) await adjustCardBalance(newCardId, newAmount)
+    }
 
     setOpen(false)
     setLoading(false)
