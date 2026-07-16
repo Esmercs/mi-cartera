@@ -10,6 +10,7 @@ interface PaidPayment {
   concept: string
   amount: number
   payment_type: string
+  installmentId?: string | null
 }
 
 export default function CollapsiblePaidGroup({
@@ -26,12 +27,18 @@ export default function CollapsiblePaidGroup({
   const supabase = deletable ? createClient() : null
   const total = payments.reduce((s, p) => s + p.amount, 0)
 
-  async function handleDelete(id: string) {
+  async function handleDelete(p: PaidPayment) {
     if (!supabase) return
-    const { data } = await supabase.from('period_payments').delete().eq('id', id).select('id')
+    const { data } = await supabase.from('period_payments').delete().eq('id', p.id).select('id')
     if (!data?.length) {
       alert('No se pudo eliminar el pago (bloqueado por permisos).')
       return
+    }
+    // Deshacer real: la cuota del ledger que este pago marcó vuelve a pendiente
+    if (p.installmentId) {
+      await supabase.from('card_expense_installments')
+        .update({ is_paid: false, paid_at: null })
+        .eq('id', p.installmentId)
     }
     router.refresh()
   }
@@ -75,7 +82,8 @@ export default function CollapsiblePaidGroup({
                 <span className="text-sm font-semibold text-gray-700">{formatMXN(p.amount)}</span>
                 {deletable && (
                   <button
-                    onClick={() => handleDelete(p.id)}
+                    onClick={() => handleDelete(p)}
+                    title={p.installmentId ? 'Eliminar pago (la cuota vuelve a pendiente)' : 'Eliminar pago'}
                     className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity"
                   >
                     <Trash2 size={14} />

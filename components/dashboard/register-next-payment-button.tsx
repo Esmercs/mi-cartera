@@ -42,12 +42,14 @@ export default function RegisterNextPaymentButton({
     const paid = parseFloat(paidAmount)
 
     await supabase.from('period_payments').insert({
-      period_id:    periodId,
+      period_id:      periodId,
       concept,
-      amount:       paid,
-      card_id:      cardId ?? null,
-      payment_type: type === 'msi' ? 'extra' : 'fijo',
-      paid_at:      new Date().toISOString(),
+      amount:         paid,
+      card_id:        cardId ?? null,
+      payment_type:   type === 'msi' ? 'extra' : 'fijo',
+      paid_at:        new Date().toISOString(),
+      // Vincular con la cuota: al borrar el pago, la cuota vuelve a pendiente
+      installment_id: (type === 'msi' || type === 'programado') ? installmentId : null,
     })
 
     // Cuota del ledger de tarjetas: el saldo de la tarjeta se deriva solo

@@ -48,12 +48,13 @@ export default function PayCardGroupButton({ periodId, cardName, items, totalAmo
         if (!item.installmentId || remaining < 0.01) continue
         const pay = Math.min(remaining, item.amount)
         await supabase.from('period_payments').insert({
-          period_id:    periodId,
-          concept:      item.concept,
-          amount:       pay,
-          card_id:      item.cardId ?? null,
-          payment_type: item.type === 'msi' ? 'extra' : 'fijo',
-          paid_at:      new Date().toISOString(),
+          period_id:      periodId,
+          concept:        item.concept,
+          amount:         pay,
+          card_id:        item.cardId ?? null,
+          payment_type:   item.type === 'msi' ? 'extra' : 'fijo',
+          paid_at:        new Date().toISOString(),
+          installment_id: item.installmentId,
         })
         await payInstallment(supabase, item.installmentId, pay)
         remaining = Math.round((remaining - pay) * 100) / 100
@@ -85,12 +86,13 @@ export default function PayCardGroupButton({ periodId, cardName, items, totalAmo
       // Pago completo: registrar cada ítem y marcar su cuota
       for (const item of items) {
         await supabase.from('period_payments').insert({
-          period_id:    periodId,
-          concept:      item.concept,
-          amount:       item.amount,
-          card_id:      item.cardId ?? null,
-          payment_type: item.type === 'msi' ? 'extra' : 'fijo',
-          paid_at:      new Date().toISOString(),
+          period_id:      periodId,
+          concept:        item.concept,
+          amount:         item.amount,
+          card_id:        item.cardId ?? null,
+          payment_type:   item.type === 'msi' ? 'extra' : 'fijo',
+          paid_at:        new Date().toISOString(),
+          installment_id: item.installmentId ?? null,
         })
         if (item.installmentId) {
           await payInstallment(supabase, item.installmentId, item.amount)

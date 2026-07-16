@@ -290,12 +290,12 @@ export default async function DashboardPage({
 
 
   // Agrupar pagos registrados: por tarjeta · gastos casa (shared sin tarjeta) · otros
-  type PaidPayment = { id: string; concept: string; amount: number; payment_type: string }
+  type PaidPayment = { id: string; concept: string; amount: number; payment_type: string; installmentId: string | null }
   const paidByCard = new Map<string, PaidPayment[]>()
   const paidShared: PaidPayment[] = []
   const paidOther:  PaidPayment[] = []
   for (const p of (payments ?? [])) {
-    const item: PaidPayment = { id: p.id, concept: p.concept, amount: p.amount, payment_type: p.payment_type }
+    const item: PaidPayment = { id: p.id, concept: p.concept, amount: p.amount, payment_type: p.payment_type, installmentId: (p as any).installment_id ?? null }
     if (p.card_id) {
       if (!paidByCard.has(p.card_id)) paidByCard.set(p.card_id, [])
       paidByCard.get(p.card_id)!.push(item)
@@ -665,7 +665,7 @@ export default async function DashboardPage({
                         <div key={p.id} className="flex justify-between items-center py-1.5 gap-2 text-gray-400">
                           <p className="text-xs truncate flex-1 line-through">{p.concept}</p>
                           <span className="text-xs shrink-0">{formatMXN(p.amount)}</span>
-                          <DeletePeriodPaymentButton paymentId={p.id} />
+                          <DeletePeriodPaymentButton paymentId={p.id} installmentId={p.installmentId} />
                         </div>
                       ))}
                     </>
