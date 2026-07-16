@@ -40,23 +40,46 @@ export default function PayCardGroupButton({ periodId, cardName, items, totalAmo
     const isPartial = paid < totalAmount
 
     if (isPartial) {
-      // Pago parcial: un solo movimiento por el monto ingresado
-      await supabase.from('period_payments').insert({
-        period_id:    periodId,
-        concept:      `Pago parcial ${cardName}`,
-        amount:       paid,
-        card_id:      items[0]?.cardId ?? null,
-        payment_type: 'fijo',
-        paid_at:      new Date().toISOString(),
-      })
-      // Aplicar el pago a las cuotas en orden: completas mientras alcance,
-      // la última que no alcanza se parte (el resto queda pendiente)
+      // Pago parcial itemizado: primero las cuotas de tarjeta (la última que no
+      // alcanza se parte), después el sobrante abona a los fijos del grupo, y si
+      // aún queda excedente se registra aparte — ningún peso se pierde.
       let remaining = paid
       for (const item of items) {
         if (!item.installmentId || remaining < 0.01) continue
         const pay = Math.min(remaining, item.amount)
+        await supabase.from('period_payments').insert({
+          period_id:    periodId,
+          concept:      item.concept,
+          amount:       pay,
+          card_id:      item.cardId ?? null,
+          payment_type: item.type === 'msi' ? 'extra' : 'fijo',
+          paid_at:      new Date().toISOString(),
+        })
         await payInstallment(supabase, item.installmentId, pay)
         remaining = Math.round((remaining - pay) * 100) / 100
+      }
+      for (const item of items) {
+        if (item.installmentId || remaining < 0.01) continue
+        const pay = Math.min(remaining, item.amount)
+        await supabase.from('period_payments').insert({
+          period_id:    periodId,
+          concept:      item.concept,
+          amount:       pay,
+          card_id:      item.cardId ?? null,
+          payment_type: 'fijo',
+          paid_at:      new Date().toISOString(),
+        })
+        remaining = Math.round((remaining - pay) * 100) / 100
+      }
+      if (remaining >= 0.01) {
+        await supabase.from('period_payments').insert({
+          period_id:    periodId,
+          concept:      `Abono extra ${cardName}`,
+          amount:       remaining,
+          card_id:      items[0]?.cardId ?? null,
+          payment_type: 'fijo',
+          paid_at:      new Date().toISOString(),
+        })
       }
     } else {
       // Pago completo: registrar cada ítem y marcar su cuota
@@ -119,7 +142,8 @@ export default function PayCardGroupButton({ periodId, cardName, items, totalAmo
                 />
                 {isPartial && (
                   <p className="text-xs text-amber-600 mt-1">
-                    Pago parcial · pendiente {formatMXN(totalAmount - paid)}
+                    Pago parcial · pendiente {formatMXN(totalAmount - paid)}. Se aplica
+                    primero a las cuotas de tarjeta y el resto abona a los gastos fijos del grupo.
                   </p>
                 )}
               </div>

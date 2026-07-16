@@ -194,10 +194,12 @@ export default async function DashboardPage({
   const totalIOwe     = pendingIOwe.reduce((s, x) => s + x.amount, 0)
   const totalOwesMe   = pendingOwesMe.reduce((s, x) => s + x.amount, 0)
 
-  // Conceptos ya pagados en el período actual (para filtrar fijos pre-pagados)
-  const paidKeys = new Set(
-    (payments ?? []).map(p => `${p.concept}|${p.card_id ?? ''}`)
-  )
+  // Monto pagado por concepto en el período (para descontar fijos pre/parcialmente pagados)
+  const paidAmounts = new Map<string, number>()
+  for (const p of payments ?? []) {
+    const k = `${p.concept}|${p.card_id ?? ''}`
+    paidAmounts.set(k, (paidAmounts.get(k) ?? 0) + p.amount)
+  }
 
   // Fijos domiciliados ya materializados en el ledger esta quincena
   // (su cuota aparece como item de tarjeta; el fijo se oculta para no duplicar)
@@ -230,20 +232,23 @@ export default async function DashboardPage({
         recurringExpenseId: null, intervalType: null, currentNextPaymentDate: null,
       })),
     ...(nextFijos)
-      .filter(e => !paidKeys.has(`${e.concept}|${e.card_id ?? ''}`))
       // Si es shared y lo paga el otro, no aparece en mi lista (queda como deuda interna)
       .filter(e => !(e.ownership === 'shared' && (e.paid_by === 'lalo' || e.paid_by === 'ale') && e.paid_by !== myOwnership))
       // Si su cobro domiciliado ya se materializó en el ledger esta quincena, evitar duplicado
       .filter(e => !materializedRecurringIds.has(e.id))
-      .map(e => {
+      .flatMap(e => {
       const isDateBased = ['bimestral', 'trimestral', 'anual', 'c/15 dias', 'c/21 dias'].includes(e.interval_type)
       const cardName = e.card_id ? (cardNameMap.get(e.card_id) ?? null) : null
       // Si shared y yo lo pago, debo el total; si shared y cada quien su parte, sólo mi parte
       const sharedFullPayer = e.ownership === 'shared' && e.paid_by === myOwnership
-      const amount = e.ownership === 'shared'
+      const baseAmount = e.ownership === 'shared'
         ? (sharedFullPayer ? e.total_amount : (isLalo ? e.lalo_amount : e.ale_amount))
         : e.total_amount
-      return {
+      // Descontar lo ya pagado del concepto: pagos parciales dejan visible solo el restante
+      const paidAmt = paidAmounts.get(`${e.concept}|${e.card_id ?? ''}`) ?? 0
+      const amount = Math.round((baseAmount - paidAmt) * 100) / 100
+      if (amount < 0.01) return []
+      return [{
         key: e.id, concept: e.concept,
         amount,
         card: cardName, type: 'fijo' as const,
@@ -253,7 +258,7 @@ export default async function DashboardPage({
         recurringExpenseId: isDateBased ? e.id : null,
         intervalType: isDateBased ? e.interval_type : null,
         currentNextPaymentDate: isDateBased ? (e.next_payment_date ?? null) : null,
-      }
+      }]
     }),
     ...(nextDebts ?? []).map(d => ({
       key: d.id, concept: d.concept, amount: d.amount,
