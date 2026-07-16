@@ -21,13 +21,18 @@ export default function EditBudgetButton({
     e.preventDefault()
     setLoading(true)
 
-    await supabase
+    const { data } = await supabase
       .from('fun_budget_periods')
       .update({ base_budget: parseFloat(budget) })
       .eq('id', budgetPeriodId)
+      .select('id')
 
     setOpen(false)
     setLoading(false)
+    if (!data?.length) {
+      alert('No se pudo actualizar el presupuesto (bloqueado por permisos).')
+      return
+    }
     router.refresh()
   }
 

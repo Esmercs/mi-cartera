@@ -73,7 +73,13 @@ export default function AdjustBalanceForm({ cardId, cardName, derivedBalance, cr
 
     const newLimit = parseFloat(limit) || 0
     if (newLimit !== creditLimit) {
-      await supabase.from('cards').update({ credit_limit: newLimit }).eq('id', cardId)
+      const { data: limitData } = await supabase
+        .from('cards').update({ credit_limit: newLimit }).eq('id', cardId).select('id')
+      if (!limitData?.length) {
+        setError('El ajuste se guardó, pero no se pudo actualizar el límite de crédito (bloqueado por permisos).')
+        setLoading(false)
+        return
+      }
     }
 
     setLoading(false)

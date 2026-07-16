@@ -28,7 +28,11 @@ export default function CollapsiblePaidGroup({
 
   async function handleDelete(id: string) {
     if (!supabase) return
-    await supabase.from('period_payments').delete().eq('id', id)
+    const { data } = await supabase.from('period_payments').delete().eq('id', id).select('id')
+    if (!data?.length) {
+      alert('No se pudo eliminar el pago (bloqueado por permisos).')
+      return
+    }
     router.refresh()
   }
 

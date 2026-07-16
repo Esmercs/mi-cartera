@@ -8,7 +8,12 @@ export default function DeleteExpenseButton({ id }: { id: string }) {
   const supabase = createClient()
 
   async function handleDelete() {
-    await supabase.from('recurring_expenses').update({ is_active: false }).eq('id', id)
+    const { data } = await supabase
+      .from('recurring_expenses').update({ is_active: false }).eq('id', id).select('id')
+    if (!data?.length) {
+      alert('No se pudo desactivar el gasto (bloqueado por permisos).')
+      return
+    }
     router.refresh()
   }
 

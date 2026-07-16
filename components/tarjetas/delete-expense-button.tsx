@@ -29,7 +29,11 @@ export default function DeleteExpenseButton({ id, concept, interPersonDebtId, ha
         .eq('id', interPersonDebtId)
         .single()
       if (debt && !debt.is_paid && (debt.paid_installments ?? 0) === 0) {
-        await supabase.from('inter_person_debts').delete().eq('id', interPersonDebtId)
+        const { data: deleted } = await supabase
+          .from('inter_person_debts').delete().eq('id', interPersonDebtId).select('id')
+        if (!deleted?.length) {
+          alert('La deuda vinculada no se pudo eliminar (bloqueada por permisos) — bórrala manualmente en Gastos.')
+        }
       }
     }
 

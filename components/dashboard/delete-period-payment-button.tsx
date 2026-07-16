@@ -11,8 +11,12 @@ export default function DeletePeriodPaymentButton({ paymentId }: { paymentId: st
 
   async function handleClick() {
     setLoading(true)
-    await supabase.from('period_payments').delete().eq('id', paymentId)
+    const { data } = await supabase.from('period_payments').delete().eq('id', paymentId).select('id')
     setLoading(false)
+    if (!data?.length) {
+      alert('No se pudo eliminar el pago (bloqueado por permisos).')
+      return
+    }
     router.refresh()
   }
 

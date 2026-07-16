@@ -2,10 +2,10 @@ export const dynamic = 'force-dynamic'
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
-import { formatMXDate, isOverdue, getCurrentPeriodDates, getOffsetPeriodDates, paydayForPeriodEnd } from '@/lib/utils/date-utils'
-import { format } from 'date-fns'
+import { formatMXDate, isOverdue, getCurrentPeriodDates, getOffsetPeriodDates } from '@/lib/utils/date-utils'
+import { format, subMonths } from 'date-fns'
 import { es } from 'date-fns/locale'
-import type { PeriodSummary, InterPersonDebt, IncomeConfig, RecurringExpenseSplit, CardExpense } from '@/types/database'
+import type { InterPersonDebt, IncomeConfig, RecurringExpenseSplit } from '@/types/database'
 import AddPeriodPaymentForm from '@/components/dashboard/add-period-payment-form'
 import CollapsiblePaidGroup from '@/components/dashboard/collapsible-paid-group'
 import SettleInternalDebtButton from '@/components/dashboard/settle-internal-debt-button'
@@ -15,6 +15,7 @@ import AddIncomeForm from '@/components/dashboard/add-income-form'
 import RegisterNextPaymentButton from '@/components/dashboard/register-next-payment-button'
 import CollapsibleCardGroup, { type LinkedDebt } from '@/components/dashboard/collapsible-card-group'
 import PeriodSelector from '@/components/shared/period-selector'
+import MonthlySummaryChart from '@/components/dashboard/monthly-summary-chart'
 
 export default async function DashboardPage({
   searchParams,
@@ -90,10 +91,14 @@ export default async function DashboardPage({
   const todayStr = format(new Date(), 'yyyy-MM-dd')
 
   // Grupo 1: queries independientes en paralelo
+  // Ventana del resumen mensual: mes en curso + 5 anteriores
+  const sixMonthsAgoStr = format(subMonths(new Date(), 5), 'yyyy-MM') + '-01'
+
   const [
-    { data: summary },
     { data: payments },
-    { data: msiExpenses },
+    { data: histPayments },
+    { data: histFun },
+    { data: histProjects },
     { data: debtsOwed },
     { data: debtsToCollect },
     { data: profile },
@@ -102,9 +107,11 @@ export default async function DashboardPage({
     { data: nextDebts },
     { data: allProjections },
   ] = await Promise.all([
-    supabase.from('period_summary').select('*').eq('id', viewPeriod?.id).single() as Promise<{ data: PeriodSummary | null }>,
     supabase.from('period_payments').select('*, cards(name)').eq('period_id', viewPeriod?.id ?? '').order('paid_at', { ascending: false }),
-    supabase.from('card_expenses').select('*, cards(name), card_expense_installments(id, number, amount, due_period_date, is_paid)').eq('owner_id', userId).gt('months', 1) as Promise<{ data: CardExpense[] | null }>,
+    // Resumen mensual (RLS acota period_payments a mis periodos)
+    supabase.from('period_payments').select('amount, paid_at').gte('paid_at', sixMonthsAgoStr) as Promise<{ data: { amount: number; paid_at: string }[] | null }>,
+    supabase.from('fun_expenses').select('amount, expense_date').gte('expense_date', sixMonthsAgoStr) as Promise<{ data: { amount: number; expense_date: string }[] | null }>,
+    supabase.from('project_payments').select('amount, paid_at').eq('owner_id', userId).gte('paid_at', sixMonthsAgoStr) as Promise<{ data: { amount: number; paid_at: string }[] | null }>,
     supabase.from('inter_person_debts').select('*, creditor:profiles!creditor_id(display_name, full_name)').eq('debtor_id', userId).eq('is_paid', false) as Promise<{ data: InterPersonDebt[] | null }>,
     supabase.from('inter_person_debts').select('*, debtor:profiles!debtor_id(display_name, full_name), cards(name)').eq('creditor_id', userId).eq('is_paid', false) as Promise<{ data: InterPersonDebt[] | null }>,
     supabase.from('profiles').select('display_name').eq('id', userId).single(),
@@ -280,24 +287,6 @@ export default async function DashboardPage({
     }
   }
 
-  // MSIs activos desde el ledger: gastos a meses con cuotas pendientes
-  const msiActive = (msiExpenses ?? []).flatMap(e => {
-    const insts = e.card_expense_installments ?? []
-    const unpaid = insts.filter(i => !i.is_paid)
-      .sort((a, b) => (a.due_period_date ?? '9999').localeCompare(b.due_period_date ?? '9999'))
-    if (!unpaid.length) return []
-    const paidCount = insts.filter(i => i.is_paid).length
-    return [{
-      id: e.id,
-      concept: e.concept,
-      cardName: e.cards?.name ?? '—',
-      monthly: unpaid[0].amount,
-      currentMonth: Math.min(paidCount + 1, e.months),
-      totalMonths: e.months,
-      nextDate: unpaid[0].due_period_date,
-    }]
-  })
-  const totalMSI = msiActive.reduce((sum, p) => sum + p.monthly, 0)
   // Lo que pesa en la quincena: para deudas a cuotas solo una mensualidad (d.amount);
   // para deudas sin cuotas, d.amount ya es el total
   const debtPending = (d: InterPersonDebt) => d.amount
@@ -326,22 +315,23 @@ export default async function DashboardPage({
     debtsByCard.get(cid)!.push(entry)
   }
 
-  // Resumen calculado desde el ingreso vigente (no el guardado en el período)
-  const ingresoQuincenal     = Math.round((currentIncome?.amount ?? 0) / 2)
-  const totalPagado          = (payments ?? []).reduce((sum, p) => sum + p.amount, 0)
+  // Ingreso de la quincena visible: el guardado en su periodo (ya es quincenal);
+  // fallback al ingreso vigente para quincenas sin periodo creado
+  const ingresoQuincenal     = Math.round((viewPeriod as any)?.income ?? (currentIncome?.amount ?? 0) / 2)
+  const totalPagado          = Math.round((payments ?? []).reduce((sum, p) => sum + p.amount, 0) * 100) / 100
 
-  // Proyecciones en la próxima quincena (se suman al estimado)
+  // Proyecciones en la quincena seleccionada (se suman al estimado)
   const proximaProjections   = (allProjections ?? []).filter(
     (p: any) => p.projected_date >= nextStartStr && p.projected_date <= nextPeriodStr
   )
-  const futureProjections    = (allProjections ?? []).filter(
-    (p: any) => p.projected_date > nextPeriodStr
-  )
   const totalProxProjections = proximaProjections.reduce((sum: number, p: any) => sum + p.amount, 0)
 
-  const totalProximaQuincena = nextItems.reduce((sum, item) => sum + item.amount, 0) + totalProxProjections
-  const totalGastos          = Math.max(totalPagado, totalProximaQuincena)
-  const restante             = ingresoQuincenal - totalGastos
+  // Por pagar: nextItems ya excluye lo pagado (paidKeys y cuotas is_paid=false)
+  const totalPorPagar = Math.round(
+    (nextItems.reduce((sum, item) => sum + item.amount, 0) + totalProxProjections) * 100
+  ) / 100
+  // Restante proyectado = ingreso − lo ya pagado − lo pendiente por pagar
+  const restante = Math.round((ingresoQuincenal - totalPagado - totalPorPagar) * 100) / 100
 
   // Deudas: solo las vencidas o que vencen en la próxima quincena, ordenadas por fecha
   const sortByDueDate = (a: InterPersonDebt, b: InterPersonDebt) => {
@@ -364,6 +354,30 @@ export default async function DashboardPage({
     ? Math.min(100, Math.round((totalPagado / ingresoQuincenal) * 100))
     : 0
 
+  // ── Resumen mensual: mes en curso + 5 anteriores ──
+  const monthly = Array.from({ length: 6 }, (_, i) => {
+    const d = subMonths(new Date(), 5 - i)
+    return {
+      key: format(d, 'yyyy-MM'),
+      mes: format(d, 'MMM yy', { locale: es }),
+      pagos: 0, diversion: 0, proyectos: 0,
+    }
+  })
+  const monthIdx = new Map(monthly.map((m, i) => [m.key, i]))
+  const addToMonth = (dateStr: string | null, field: 'pagos' | 'diversion' | 'proyectos', amount: number) => {
+    const i = monthIdx.get((dateStr ?? '').slice(0, 7))
+    if (i !== undefined) monthly[i][field] += amount
+  }
+  for (const p of histPayments ?? []) addToMonth(p.paid_at, 'pagos', p.amount)
+  for (const f of histFun ?? []) addToMonth(f.expense_date, 'diversion', f.amount)
+  for (const p of histProjects ?? []) addToMonth(p.paid_at, 'proyectos', p.amount)
+  for (const m of monthly) {
+    m.pagos = Math.round(m.pagos * 100) / 100
+    m.diversion = Math.round(m.diversion * 100) / 100
+    m.proyectos = Math.round(m.proyectos * 100) / 100
+  }
+  const hasMonthlyData = monthly.some(m => m.pagos > 0 || m.diversion > 0 || m.proyectos > 0)
+
   return (
     <div className="space-y-4 max-w-2xl mx-auto">
 
@@ -385,9 +399,9 @@ export default async function DashboardPage({
           <div className="p-4">
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Ingreso</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">{formatMXN(ingresoQuincenal)}</p>
-            {totalProximaQuincena > 0 && (
+            {(totalPagado > 0 || totalPorPagar > 0) && (
               <p className="text-xs text-gray-400 mt-1">
-                − {formatMXN(totalProximaQuincena)} gastos
+                − {formatMXN(totalPagado)} pagado · − {formatMXN(totalPorPagar)} por pagar
               </p>
             )}
           </div>
@@ -419,18 +433,6 @@ export default async function DashboardPage({
             </div>
           </div>
         )}
-      </div>
-
-      {/* ── Métricas secundarias ── */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="card p-3.5">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Pagado</p>
-          <p className="text-lg font-bold text-orange-500 mt-1">{formatMXN(totalPagado)}</p>
-        </div>
-        <div className="card p-3.5">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">MSI/mes</p>
-          <p className="text-lg font-bold text-purple-600 mt-1">{formatMXN(totalMSI)}</p>
-        </div>
       </div>
 
       {/* ── Esta quincena — header de navegación ── */}
@@ -763,61 +765,20 @@ export default async function DashboardPage({
         )}
       </div>
 
-      {/* ── MSIs activos (del ledger de tarjetas) ── */}
-      {msiActive.length > 0 && (
-        <div className="card p-4 space-y-3">
+      {/* ── Resumen mensual ── */}
+      {hasMonthlyData && (
+        <div className="card p-4 space-y-2">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-gray-800 text-sm">Meses sin intereses</h2>
-            <span className="text-xs bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full font-medium">
-              {formatMXN(totalMSI)}/mes
-            </span>
+            <h2 className="font-semibold text-gray-800 text-sm">Resumen mensual</h2>
+            <span className="text-xs text-gray-400">últimos 6 meses</span>
           </div>
-          <div className="space-y-0">
-            {msiActive.map(plan => (
-              <div key={plan.id} className="flex items-center justify-between py-2.5 border-b last:border-0">
-                <div className="min-w-0 flex-1 mr-3">
-                  <p className="text-sm font-medium text-gray-800 truncate">{plan.concept}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {plan.cardName} · cuota {plan.currentMonth}/{plan.totalMonths}
-                  </p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-semibold text-gray-800">{formatMXN(plan.monthly)}</p>
-                  <p className={`text-xs mt-0.5 ${isOverdue(paydayForPeriodEnd(plan.nextDate)) ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
-                    {formatMXDate(paydayForPeriodEnd(plan.nextDate))}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
+          <MonthlySummaryChart data={monthly} />
+          <p className="text-[10px] text-gray-300">
+            Pagos y proyectos son tuyos · Diversión es el gasto compartido de los dos
+          </p>
         </div>
       )}
 
-
-    </div>
-  )
-}
-
-function SummaryCard({
-  label, value, color, subtitle,
-}: {
-  label: string
-  value: string
-  color: 'blue' | 'green' | 'orange' | 'purple' | 'red'
-  subtitle?: string
-}) {
-  const colors = {
-    blue:   'bg-blue-50 text-blue-700',
-    green:  'bg-green-50 text-green-700',
-    orange: 'bg-orange-50 text-orange-700',
-    purple: 'bg-purple-50 text-purple-700',
-    red:    'bg-red-50 text-red-700',
-  }
-  return (
-    <div className={`card p-3 md:p-4 ${colors[color]}`}>
-      <p className="text-xs font-medium opacity-70">{label}</p>
-      <p className="text-lg md:text-xl font-bold mt-0.5">{value}</p>
-      {subtitle && <p className="text-xs opacity-60 mt-0.5">{subtitle}</p>}
     </div>
   )
 }

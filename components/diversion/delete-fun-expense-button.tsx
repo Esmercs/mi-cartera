@@ -8,7 +8,12 @@ export default function DeleteFunExpenseButton({ id }: { id: string }) {
   const supabase = createClient()
 
   async function handleDelete() {
-    await supabase.from('fun_expenses').delete().eq('id', id)
+    // .select() detecta bloqueos de RLS (no lanzan error, regresan 0 filas)
+    const { data } = await supabase.from('fun_expenses').delete().eq('id', id).select('id')
+    if (!data?.length) {
+      alert('No se pudo eliminar (bloqueado por permisos).')
+      return
+    }
     router.refresh()
   }
 

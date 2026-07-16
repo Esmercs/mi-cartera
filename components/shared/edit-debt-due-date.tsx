@@ -21,9 +21,14 @@ export default function EditDebtDueDate({
   async function handleSave() {
     if (value === dueDate) { setEditing(false); return }
     setLoading(true)
-    await supabase.from('inter_person_debts').update({ due_date: value }).eq('id', debtId)
+    const { data } = await supabase
+      .from('inter_person_debts').update({ due_date: value }).eq('id', debtId).select('id')
     setLoading(false)
     setEditing(false)
+    if (!data?.length) {
+      alert('No se pudo cambiar la fecha: solo el acreedor puede editar la deuda.')
+      return
+    }
     router.refresh()
   }
 

@@ -125,9 +125,9 @@ export default function AddExpenseForm() {
     }
 
     // Gasto compartido → la parte de la pareja queda como deuda entre personas
-    // (la muestran y liquidan el Dashboard y Compartido sin código nuevo)
+    // (la muestran y liquidan el Dashboard y Gastos sin código nuevo)
     if (isShared && partner) {
-      const { data: debt } = await supabase
+      const { data: debt, error: debtErr } = await supabase
         .from('inter_person_debts')
         .insert({
           creditor_id:        user!.id,
@@ -142,10 +142,17 @@ export default function AddExpenseForm() {
         .select('id')
         .single()
 
-      if (debt) {
-        await supabase.from('card_expenses')
+      let linked = false
+      if (debt && !debtErr) {
+        const { data: linkData } = await supabase.from('card_expenses')
           .update({ inter_person_debt_id: debt.id })
           .eq('id', expense.id)
+          .select('id')
+        linked = !!linkData?.length
+      }
+      if (!debt || !linked) {
+        // El gasto es válido por sí solo; solo falló el vínculo con la deuda
+        alert(`El gasto se guardó, pero no se pudo crear la deuda de ${partner.name}. Regístrala manualmente en Gastos → Deudas entre nosotros.`)
       }
     }
 

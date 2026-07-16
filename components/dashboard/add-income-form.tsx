@@ -19,14 +19,18 @@ export default function AddIncomeForm({ currentAmount }: { currentAmount: number
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    await supabase.from('income_config').upsert({
+    const { data } = await supabase.from('income_config').upsert({
       owner_id: user.id,
       amount: parseFloat(amount),
       valid_from: new Date().toISOString().split('T')[0],
-    }, { onConflict: 'owner_id,valid_from' })
+    }, { onConflict: 'owner_id,valid_from' }).select('id')
 
     setOpen(false)
     setLoading(false)
+    if (!data?.length) {
+      alert('No se pudo guardar el ingreso (bloqueado por permisos).')
+      return
+    }
     router.refresh()
   }
 

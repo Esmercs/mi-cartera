@@ -16,11 +16,16 @@ export default function ApproveRejectButtons({ userId, showApproveOnly = false }
 
   async function updateStatus(status: 'approved' | 'rejected') {
     setLoading(status === 'approved' ? 'approve' : 'reject')
-    await supabase
+    const { data } = await supabase
       .from('profiles')
       .update({ status, updated_at: new Date().toISOString() })
       .eq('id', userId)
+      .select('id')
     setLoading(null)
+    if (!data?.length) {
+      alert('No se pudo actualizar el estado (bloqueado por permisos).')
+      return
+    }
     router.refresh()
   }
 

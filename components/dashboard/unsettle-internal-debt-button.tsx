@@ -11,8 +11,12 @@ export default function UnsettleInternalDebtButton({ settlementId }: { settlemen
 
   async function handleClick() {
     setLoading(true)
-    await supabase.from('internal_debt_settlements').delete().eq('id', settlementId)
+    const { data } = await supabase.from('internal_debt_settlements').delete().eq('id', settlementId).select('id')
     setLoading(false)
+    if (!data?.length) {
+      alert('No se pudo deshacer el pago (bloqueado por permisos).')
+      return
+    }
     router.refresh()
   }
 
