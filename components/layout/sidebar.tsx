@@ -3,7 +3,6 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
-  Users,
   CreditCard,
   CalendarDays,
   PartyPopper,
@@ -24,7 +23,6 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: '/dashboard',    label: 'Mi Dashboard',      icon: <LayoutDashboard size={18} /> },
-  { href: '/shared',       label: 'Compartido',         icon: <Users size={18} /> },
   { href: '/gastos-fijos', label: 'Gastos',              icon: <CalendarDays size={18} /> },
   { href: '/tarjetas',     label: 'Tarjetas',           icon: <CreditCard size={18} /> },
   { href: '/diversion',    label: 'Diversión',          icon: <PartyPopper size={18} /> },

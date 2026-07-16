@@ -2,14 +2,18 @@ export const dynamic = 'force-dynamic'
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
-import { intervalLabel, formatMXDate, getCurrentPeriodDates, getOffsetPeriodDates } from '@/lib/utils/date-utils'
+import { intervalLabel, formatMXDate, isOverdue, getCurrentPeriodDates, getOffsetPeriodDates } from '@/lib/utils/date-utils'
 import { format } from 'date-fns'
+import Link from 'next/link'
 import type { RecurringExpenseSplit } from '@/types/database'
 import AddExpenseForm from '@/components/gastos-fijos/add-expense-form'
 import DeleteExpenseButton from '@/components/gastos-fijos/delete-expense-button'
 import EditExpenseButton from '@/components/gastos-fijos/edit-expense-button'
 import AddProjectionForm from '@/components/dashboard/add-projection-form'
 import MarkProjectionPaidButton from '@/components/dashboard/mark-projection-paid-button'
+import AddInterPersonDebtForm from '@/components/shared/add-inter-person-debt-form'
+import MarkDebtPaidButton from '@/components/shared/mark-debt-paid-button'
+import EditDebtDialog from '@/components/shared/edit-debt-dialog'
 
 export default async function GastosFijosPage() {
   const supabase = createServerClient()
@@ -41,11 +45,12 @@ export default async function GastosFijosPage() {
     .eq('period_date', periodDateStr)
     .single()
 
-  // Gastos con split calculado (vista SQL) + tarjetas + proyecciones en paralelo
-  const [{ data: allExpenses }, { data: cards }, { data: allProjections }] = await Promise.all([
+  // Gastos con split calculado (vista SQL) + tarjetas + proyecciones + deudas entre nosotros en paralelo
+  const [{ data: allExpenses }, { data: cards }, { data: allProjections }, { data: debts }] = await Promise.all([
     supabase.from('recurring_expenses_split').select('*').eq('is_active', true).order('next_payment_date', { ascending: true }) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.from('cards').select('id, name').eq('is_active', true),
     (supabase.from('projections') as any).select('*, cards(name)').eq('owner_id', userId).eq('is_paid', false).gte('projected_date', todayStr).order('projected_date', { ascending: true }),
+    supabase.from('inter_person_debts').select('*, debtor:profiles!debtor_id(display_name, full_name), creditor:profiles!creditor_id(display_name, full_name), cards(name)').eq('is_paid', false).order('created_at', { ascending: false }),
   ])
 
   const proximaProjections = (allProjections ?? []).filter(
@@ -220,6 +225,96 @@ export default async function GastosFijosPage() {
           </>
         )}
       </section>
+
+      {/* Deudas entre nosotros */}
+      <section className="card p-4 md:p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-gray-800">Deudas entre nosotros</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Las compras con tarjeta regístralas en{' '}
+              <Link href="/tarjetas" className="text-brand-600 hover:underline">Tarjetas</Link>
+              {' '}como gasto compartido — la deuda se crea sola.
+            </p>
+          </div>
+          <AddInterPersonDebtForm />
+        </div>
+
+        {!debts?.length ? (
+          <p className="text-sm text-gray-400">Sin deudas pendientes.</p>
+        ) : (
+          <div className="space-y-3">
+            {debts.map((debt: any) => (
+              <div
+                key={debt.id}
+                className="flex items-center justify-between p-3 border rounded-xl bg-gray-50"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium text-gray-800">{debt.concept}</p>
+                    <EditDebtDialog
+                      debtId={debt.id}
+                      concept={debt.concept}
+                      amount={debt.amount}
+                      dueDate={debt.due_date ?? null}
+                      totalInstallments={debt.total_installments ?? null}
+                      paidInstallments={debt.paid_installments ?? 0}
+                      cardId={debt.card_id ?? null}
+                      cardName={debt.cards?.name ?? null}
+                      creditorId={debt.creditor_id}
+                      currentUserId={userId}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    <span className="font-medium">{debt.debtor?.display_name}</span>
+                    {' '}le debe a{' '}
+                    <span className="font-medium">{debt.creditor?.display_name}</span>
+                    {debt.cards?.name && (
+                      <span className="ml-1.5 bg-blue-50 text-blue-600 text-[10px] px-1.5 py-0.5 rounded">
+                        💳 {debt.cards.name}
+                      </span>
+                    )}
+                  </p>
+                  {debt.total_installments && (
+                    <p className="text-xs text-purple-600 mt-0.5">
+                      {debt.paid_installments}/{debt.total_installments} cuotas ·{' '}
+                      {formatMXN(debt.amount)}/mes
+                    </p>
+                  )}
+                  {debt.due_date && (
+                    <p className={`text-xs mt-0.5 ${isOverdue(debt.due_date) ? 'text-red-500' : 'text-gray-400'}`}>
+                      Vence: {formatMXDate(debt.due_date)}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="font-semibold text-gray-800">
+                    {debt.total_installments
+                      ? formatMXN(debt.amount * (debt.total_installments - debt.paid_installments))
+                      : formatMXN(debt.amount)}
+                  </span>
+                  {debt.creditor_id === userId ? (
+                    <MarkDebtPaidButton
+                      debtId={debt.id}
+                      creditorId={debt.creditor_id}
+                      totalInstallments={debt.total_installments ?? null}
+                      paidInstallments={debt.paid_installments ?? 0}
+                      dueDate={debt.due_date ?? null}
+                      concept={debt.concept}
+                      amount={debt.amount}
+                    />
+                  ) : (
+                    // Solo quien recibe el pago (acreedor) puede confirmarlo
+                    <span className="text-xs text-gray-400 bg-gray-50 border border-gray-200 px-2 py-1 rounded-lg whitespace-nowrap">
+                      Confirma {debt.creditor?.display_name}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   )
 }
@@ -298,6 +393,7 @@ function ExpenseTable({
               )}
               <th className="pb-2 font-medium">Intervalo</th>
               <th className="pb-2 font-medium">Día de pago</th>
+              {showSplit && <th className="pb-2 font-medium">Paga</th>}
               <th className="pb-2 font-medium">Tarjeta</th>
               <th className="pb-2"></th>
             </tr>
@@ -317,6 +413,16 @@ function ExpenseTable({
                 <td className="py-2.5 text-gray-500">
                   {e.payment_day === 0 ? '15 y 30' : e.payment_day ? `Día ${e.payment_day}` : '—'}
                 </td>
+                {showSplit && (
+                  <td className="py-2.5 text-xs">
+                    {!e.paid_by || e.paid_by === 'each'
+                      ? <span className="text-gray-400">Cada quien</span>
+                      : e.paid_by === 'lalo'
+                        ? <span className="text-lalo font-medium">Lalo</span>
+                        : <span className="text-ale font-medium">Ale</span>
+                    }
+                  </td>
+                )}
                 <td className="py-2.5 text-xs text-brand-600">
                   {e.card_id ? (cardMap.get(e.card_id) ?? '—') : '—'}
                 </td>

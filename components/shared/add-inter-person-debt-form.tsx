@@ -71,6 +71,10 @@ export default function AddInterPersonDebtForm() {
           <div className="card p-5 w-full max-w-sm space-y-4">
             <h3 className="font-semibold text-gray-800">Registrar deuda</h3>
             <p className="text-xs text-gray-500">Tú eres el acreedor (a ti te deben).</p>
+            <p className="text-xs text-blue-500 bg-blue-50 rounded-lg px-2.5 py-1.5">
+              💡 Si la compra fue con tarjeta, mejor regístrala en Tarjetas como
+              gasto compartido — el split y la deuda se crean solos.
+            </p>
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>
                 <label className="label">¿Quién te debe?</label>
