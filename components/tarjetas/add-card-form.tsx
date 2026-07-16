@@ -33,7 +33,6 @@ export default function AddCardForm() {
       name:            form.name,
       card_type:       form.card_type,
       last_four:       form.last_four || null,
-      current_balance: 0,
       credit_limit:    parseFloat(form.credit_limit) || 0,
       is_active:       true,
     })

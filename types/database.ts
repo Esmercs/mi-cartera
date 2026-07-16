@@ -103,32 +103,6 @@ export interface PeriodPayment {
   created_at: string
 }
 
-export interface InstallmentPlan {
-  id: string
-  owner_id: string
-  ownership: 'lalo' | 'ale'
-  card_id: string | null
-  concept: string
-  total_months: number
-  current_month: number
-  monthly_amount: number
-  next_payment_date: string | null
-  remaining_debt: number
-  started_at: string
-  is_active: boolean
-  created_at: string
-  // joined
-  card?: Card
-}
-
-export interface InstallmentPayment {
-  id: string
-  plan_id: string
-  amount: number
-  paid_at: string
-  created_at: string
-}
-
 export interface FunBudgetPeriod {
   id: string
   period_start: string
@@ -157,22 +131,6 @@ export interface FunBudgetSummary {
   total_spent: number
   remaining_budget: number
   spent_pct: number
-}
-
-export interface ScheduledPayment {
-  id: string
-  owner_id: string
-  concept: string
-  amount: number
-  card_id: string | null
-  payment_type: PaymentType
-  period_date: string
-  is_paid: boolean
-  paid_at: string | null
-  notes: string | null
-  created_at: string
-  // joined
-  cards?: { name: string } | null
 }
 
 export interface CardExpenseInstallment {
