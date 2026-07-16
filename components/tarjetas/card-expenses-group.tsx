@@ -5,6 +5,7 @@ import { formatMXN } from '@/lib/utils/currency'
 import { formatMXDate, paydayForPeriodEnd } from '@/lib/utils/date-utils'
 import PayInstallmentButton from './pay-installment-button'
 import DeleteExpenseButton from './delete-expense-button'
+import MarkDebtPaidButton from '@/components/shared/mark-debt-paid-button'
 
 export interface ExpenseRow {
   id: string
@@ -23,17 +24,30 @@ export interface ExpenseRow {
   nextInstallment: { id: string; amount: number; due: string | null } | null
 }
 
+export interface ReceivableRow {
+  id: string
+  concept: string
+  debtorName: string
+  pending: number
+  cuotasLabel: string | null
+  totalInstallments: number | null
+  paidInstallments: number
+  dueDate: string | null
+  amount: number
+}
+
 interface Props {
   cardName: string
   balance: number
   creditLimit: number
   expenses: ExpenseRow[]
   partnerName: string
+  receivables?: ReceivableRow[]   // deudas entre personas cargadas a esta tarjeta
   headerActions?: ReactNode   // AdjustBalanceForm + DeleteCardButton (server-rendered)
 }
 
 export default function CardExpensesGroup({
-  cardName, balance, creditLimit, expenses, partnerName, headerActions,
+  cardName, balance, creditLimit, expenses, partnerName, receivables = [], headerActions,
 }: Props) {
   const [open, setOpen] = useState(false)
   const usedPct = creditLimit > 0 ? Math.round((balance / creditLimit) * 100) : null
@@ -52,7 +66,7 @@ export default function CardExpensesGroup({
             : <ChevronRight size={14} className="text-gray-400 shrink-0" />}
           <span className="text-sm font-semibold text-gray-700 truncate">{cardName}</span>
           <span className="text-xs text-gray-400 shrink-0">
-            · {expenses.length} movimiento{expenses.length !== 1 ? 's' : ''}
+            · {expenses.length + receivables.length} movimiento{expenses.length + receivables.length !== 1 ? 's' : ''}
           </span>
         </button>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -87,7 +101,7 @@ export default function CardExpensesGroup({
 
       {open && (
         <div className="px-4 py-2 divide-y divide-gray-50">
-          {expenses.length === 0 && (
+          {expenses.length === 0 && receivables.length === 0 && (
             <p className="text-sm text-gray-400 py-2">Sin movimientos pendientes.</p>
           )}
 
@@ -141,6 +155,35 @@ export default function CardExpensesGroup({
               </div>
             </div>
           ))}
+
+          {receivables.length > 0 && (
+            <div className="py-2">
+              <p className="text-[10px] font-semibold text-orange-500 uppercase tracking-wide mb-1">
+                Deudas en esta tarjeta (te deben)
+              </p>
+              {receivables.map(r => (
+                <div key={r.id} className="flex items-center justify-between py-2 gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-800 truncate">{r.concept}</p>
+                    <p className="text-xs text-orange-500">
+                      {r.debtorName} debe{r.cuotasLabel ? ` · ${r.cuotasLabel}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm font-semibold text-orange-600">{formatMXN(r.pending)}</span>
+                    <MarkDebtPaidButton
+                      debtId={r.id}
+                      totalInstallments={r.totalInstallments}
+                      paidInstallments={r.paidInstallments}
+                      dueDate={r.dueDate}
+                      concept={r.concept}
+                      amount={r.amount}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {ajustes.length > 0 && (
             <div className="py-2">

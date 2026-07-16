@@ -224,6 +224,11 @@ export default async function SharedPage() {
                     <span className="font-medium">{debt.debtor?.display_name}</span>
                     {' '}le debe a{' '}
                     <span className="font-medium">{debt.creditor?.display_name}</span>
+                    {debt.cards?.name && (
+                      <span className="ml-1.5 bg-blue-50 text-blue-600 text-[10px] px-1.5 py-0.5 rounded">
+                        💳 {debt.cards.name}
+                      </span>
+                    )}
                   </p>
                   {debt.total_installments && (
                     <p className="text-xs text-purple-600 mt-0.5">

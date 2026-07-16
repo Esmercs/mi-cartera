@@ -26,7 +26,7 @@ export default async function TarjetasPage() {
   const ownership = isLalo ? 'lalo' : 'ale'
   const partnerName = isLalo ? 'Ale' : 'Lalo'
 
-  const [{ data: cards }, { data: expenses }] = await Promise.all([
+  const [{ data: cards }, { data: expenses }, { data: cardDebts }] = await Promise.all([
     supabase.from('cards').select('*')
       .in('ownership', [ownership, 'shared'])
       .eq('is_active', true)
@@ -35,6 +35,12 @@ export default async function TarjetasPage() {
     supabase.from('card_expenses')
       .select('*, cards(name), card_expense_installments(*)')
       .order('created_at', { ascending: false }) as unknown as Promise<{ data: CardExpense[] | null }>,
+    // Deudas entre personas cargadas a una de mis tarjetas (yo soy el acreedor)
+    supabase.from('inter_person_debts')
+      .select('*, debtor:profiles!debtor_id(display_name)')
+      .eq('creditor_id', userId)
+      .eq('is_paid', false)
+      .not('card_id', 'is', null) as unknown as Promise<{ data: any[] | null }>,
   ])
 
   const todayStr = format(new Date(), 'yyyy-MM-dd')
@@ -100,10 +106,45 @@ export default async function TarjetasPage() {
     } else noCardRows.push(r)
   }
 
-  const groups = Array.from(groupMap.values()).map(g => ({
-    ...g,
-    balance: Math.round(g.rows.reduce((s, r) => s + r.remaining, 0) * 100) / 100,
-  }))
+  // Deudas con tarjeta que NO nacieron de un gasto compartido del ledger
+  // (esas ya están contadas en su card_expense — evitar doble conteo)
+  const linkedDebtIds = new Set((expenses ?? []).map(e => e.inter_person_debt_id).filter(Boolean))
+  const receivablesByCard = new Map<string, {
+    id: string; concept: string; debtorName: string; pending: number
+    cuotasLabel: string | null; totalInstallments: number | null; paidInstallments: number
+    dueDate: string | null; amount: number
+  }[]>()
+  for (const d of cardDebts ?? []) {
+    if (!d.card_id || linkedDebtIds.has(d.id) || !groupMap.has(d.card_id)) continue
+    const pending = d.total_installments
+      ? Math.round(d.amount * (d.total_installments - (d.paid_installments ?? 0)) * 100) / 100
+      : d.amount
+    if (pending < 0.01) continue
+    if (!receivablesByCard.has(d.card_id)) receivablesByCard.set(d.card_id, [])
+    receivablesByCard.get(d.card_id)!.push({
+      id: d.id,
+      concept: d.concept,
+      debtorName: d.debtor?.display_name ?? 'Deudor',
+      pending,
+      cuotasLabel: d.total_installments
+        ? `${d.paid_installments ?? 0}/${d.total_installments} cuotas · ${formatMXN(d.amount)}/mes`
+        : null,
+      totalInstallments: d.total_installments ?? null,
+      paidInstallments: d.paid_installments ?? 0,
+      dueDate: d.due_date ?? null,
+      amount: d.amount,
+    })
+  }
+
+  const groups = Array.from(groupMap.entries()).map(([cardId, g]) => {
+    const receivables = receivablesByCard.get(cardId) ?? []
+    const receivableTotal = receivables.reduce((s, r) => s + r.pending, 0)
+    return {
+      ...g,
+      receivables,
+      balance: Math.round((g.rows.reduce((s, r) => s + r.remaining, 0) + receivableTotal) * 100) / 100,
+    }
+  })
 
   const totalDebt = Math.round(groups.reduce((s, g) => s + g.balance, 0) * 100) / 100
   const totalLimit = groups.reduce((s, g) => s + (g.card?.card_type === 'credit' ? g.card.credit_limit : 0), 0)
@@ -205,6 +246,7 @@ export default async function TarjetasPage() {
               creditLimit={g.card?.card_type === 'credit' ? g.card.credit_limit : 0}
               expenses={g.rows}
               partnerName={partnerName}
+              receivables={g.receivables}
               headerActions={g.card ? (
                 <>
                   <AdjustBalanceForm
