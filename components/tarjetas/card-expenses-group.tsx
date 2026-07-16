@@ -19,6 +19,7 @@ export interface ExpenseRow {
   isShared: boolean
   sharedPct: number | null
   expenseType: 'compra' | 'ajuste'
+  isDomiciliado: boolean
   mine: boolean
   overdue: boolean
   interPersonDebtId: string | null
@@ -122,6 +123,9 @@ export default function CardExpensesGroup({
                       <span className="bg-pink-50 text-pink-600 px-1.5 rounded">
                         {partnerName} {e.sharedPct?.toFixed(0)}%
                       </span>
+                    )}
+                    {e.isDomiciliado && (
+                      <span className="bg-blue-50 text-blue-500 px-1.5 rounded">domiciliado</span>
                     )}
                     {e.nextInstallment?.due && (
                       <span className={e.overdue ? 'text-red-500 font-semibold' : ''}>

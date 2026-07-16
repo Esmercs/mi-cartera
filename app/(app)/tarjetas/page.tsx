@@ -11,6 +11,7 @@ import AddCardForm from '@/components/tarjetas/add-card-form'
 import DeleteCardButton from '@/components/tarjetas/delete-card-button'
 import AdjustBalanceForm from '@/components/tarjetas/adjust-balance-form'
 import CardExpensesGroup, { type ExpenseRow } from '@/components/tarjetas/card-expenses-group'
+import { materializeCardCharges } from '@/lib/utils/materialize-charges'
 import PayInstallmentButton from '@/components/tarjetas/pay-installment-button'
 
 export default async function TarjetasPage() {
@@ -25,6 +26,9 @@ export default async function TarjetasPage() {
   const isLalo = (profile as any)?.display_name?.toLowerCase() === 'lalo'
   const ownership = isLalo ? 'lalo' : 'ale'
   const partnerName = isLalo ? 'Ale' : 'Lalo'
+
+  // Materializar cargos domiciliados cuya fecha de cobro ya llegó
+  await materializeCardCharges(supabase as any, ownership, userId)
 
   const [{ data: cards }, { data: expenses }, { data: cardDebts }] = await Promise.all([
     supabase.from('cards').select('*')
@@ -76,6 +80,7 @@ export default async function TarjetasPage() {
       isShared: e.is_shared,
       sharedPct: e.shared_pct,
       expenseType: e.expense_type,
+      isDomiciliado: e.source?.startsWith('recurring-') ?? false,
       mine: e.owner_id === userId,
       // Vencida = ya pasó su día de pago (no el fin de la quincena)
       overdue: !!next?.due_period_date && (paydayForPeriodEnd(next.due_period_date) ?? '9999') < todayStr,

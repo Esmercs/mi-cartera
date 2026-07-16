@@ -16,6 +16,7 @@ import RegisterNextPaymentButton from '@/components/dashboard/register-next-paym
 import CollapsibleCardGroup, { type LinkedDebt } from '@/components/dashboard/collapsible-card-group'
 import PeriodSelector from '@/components/shared/period-selector'
 import MonthlySummaryChart from '@/components/dashboard/monthly-summary-chart'
+import { materializeCardCharges } from '@/lib/utils/materialize-charges'
 
 export default async function DashboardPage({
   searchParams,
@@ -27,6 +28,14 @@ export default async function DashboardPage({
   if (!session) redirect('/login')
 
   const userId = session.user.id
+
+  const { data: profile } = await supabase
+    .from('profiles').select('display_name').eq('id', userId).single()
+  const isLalo      = (profile as any)?.display_name?.toLowerCase() === 'lalo'
+  const myOwnership = isLalo ? 'lalo' : 'ale'
+
+  // Materializar cargos domiciliados cuya fecha de cobro ya llegó
+  await materializeCardCharges(supabase as any, myOwnership, userId)
 
   // Período actual
   const { start, end, label: periodLabel } = getCurrentPeriodDates()
@@ -101,7 +110,6 @@ export default async function DashboardPage({
     { data: histProjects },
     { data: debtsOwed },
     { data: debtsToCollect },
-    { data: profile },
     { data: currentIncome },
     { data: dueInstallments },
     { data: nextDebts },
@@ -114,16 +122,12 @@ export default async function DashboardPage({
     supabase.from('project_payments').select('amount, paid_at').eq('owner_id', userId).gte('paid_at', sixMonthsAgoStr) as Promise<{ data: { amount: number; paid_at: string }[] | null }>,
     supabase.from('inter_person_debts').select('*, creditor:profiles!creditor_id(display_name, full_name)').eq('debtor_id', userId).eq('is_paid', false) as Promise<{ data: InterPersonDebt[] | null }>,
     supabase.from('inter_person_debts').select('*, debtor:profiles!debtor_id(display_name, full_name), cards(name)').eq('creditor_id', userId).eq('is_paid', false) as Promise<{ data: InterPersonDebt[] | null }>,
-    supabase.from('profiles').select('display_name').eq('id', userId).single(),
     supabase.from('income_config').select('amount, valid_from').eq('owner_id', userId).order('valid_from', { ascending: false }).limit(1).single() as Promise<{ data: IncomeConfig | null }>,
     // Cuotas del ledger de tarjetas que vencen en la quincena seleccionada
-    supabase.from('card_expense_installments').select('*, expense:card_expenses(id, owner_id, concept, card_id, months, expense_type, cards(name))').eq('is_paid', false).eq('due_period_date', nextPeriodStr) as Promise<{ data: any[] | null }>,
+    supabase.from('card_expense_installments').select('*, expense:card_expenses(id, owner_id, concept, card_id, months, expense_type, source, source_id, cards(name))').eq('is_paid', false).eq('due_period_date', nextPeriodStr) as Promise<{ data: any[] | null }>,
     supabase.from('inter_person_debts').select('*, creditor:profiles!creditor_id(display_name)').eq('debtor_id', userId).eq('is_paid', false).gte('due_date', nextStartStr).lte('due_date', nextPeriodStr) as Promise<{ data: any[] | null }>,
     (supabase.from('projections') as any).select('*, cards(name)').eq('owner_id', userId).eq('is_paid', false).gte('projected_date', todayStr).order('projected_date', { ascending: true }),
   ])
-
-  const isLalo      = (profile as any)?.display_name?.toLowerCase() === 'lalo'
-  const myOwnership = isLalo ? 'lalo' : 'ale'
 
   // Grupo 2: gastos fijos + tarjetas + concepts compartidos + settlements en paralelo
   const [
@@ -195,6 +199,14 @@ export default async function DashboardPage({
     (payments ?? []).map(p => `${p.concept}|${p.card_id ?? ''}`)
   )
 
+  // Fijos domiciliados ya materializados en el ledger esta quincena
+  // (su cuota aparece como item de tarjeta; el fijo se oculta para no duplicar)
+  const materializedRecurringIds = new Set(
+    ((dueInstallments ?? []) as any[])
+      .filter(i => typeof i.expense?.source === 'string' && i.expense.source.startsWith('recurring-'))
+      .map(i => i.expense.source_id)
+  )
+
   // Unificar en una lista ordenada por monto descendente
   type NextItem = {
     key: string; concept: string; amount: number; card: string | null
@@ -221,6 +233,8 @@ export default async function DashboardPage({
       .filter(e => !paidKeys.has(`${e.concept}|${e.card_id ?? ''}`))
       // Si es shared y lo paga el otro, no aparece en mi lista (queda como deuda interna)
       .filter(e => !(e.ownership === 'shared' && (e.paid_by === 'lalo' || e.paid_by === 'ale') && e.paid_by !== myOwnership))
+      // Si su cobro domiciliado ya se materializó en el ledger esta quincena, evitar duplicado
+      .filter(e => !materializedRecurringIds.has(e.id))
       .map(e => {
       const isDateBased = ['bimestral', 'trimestral', 'anual', 'c/15 dias', 'c/21 dias'].includes(e.interval_type)
       const cardName = e.card_id ? (cardNameMap.get(e.card_id) ?? null) : null

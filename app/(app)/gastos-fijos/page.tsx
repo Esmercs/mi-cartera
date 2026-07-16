@@ -371,6 +371,7 @@ function ExpenseTable({
                 cardId={e.card_id}
                 ownership={e.ownership}
                 paidBy={e.paid_by}
+                nextChargeDate={e.next_charge_date}
               />
               <DeleteExpenseButton id={e.id} />
             </div>
@@ -437,6 +438,7 @@ function ExpenseTable({
                       cardId={e.card_id}
                       ownership={e.ownership}
                       paidBy={e.paid_by}
+                      nextChargeDate={e.next_charge_date}
                     />
                     <DeleteExpenseButton id={e.id} />
                   </div>

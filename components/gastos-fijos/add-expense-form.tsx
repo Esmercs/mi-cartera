@@ -30,6 +30,7 @@ export default function AddExpenseForm() {
     payment_day: '15',
     next_payment_date: '',
     card_id: '',
+    next_charge_date: '',
   })
   const [cards, setCards] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(false)
@@ -65,6 +66,7 @@ export default function AddExpenseForm() {
       payment_day: parseInt(form.payment_day) as 0 | 15 | 30,
       next_payment_date: isDateBased ? (form.next_payment_date || null) : null,
       card_id: form.card_id || null,
+      next_charge_date: form.card_id ? (form.next_charge_date || null) : null,
       paid_by: form.ownership === 'shared' ? form.paid_by : 'each',
     })
 
@@ -76,7 +78,7 @@ export default function AddExpenseForm() {
   return (
     <>
       <button onClick={async () => {
-        setForm({ concept: '', total_amount: '', ownership: 'shared', interval_type: 'mensual', payment_day: '15', next_payment_date: '', card_id: '' })
+        setForm({ concept: '', total_amount: '', ownership: 'shared', paid_by: 'each', interval_type: 'mensual', payment_day: '15', next_payment_date: '', card_id: '', next_charge_date: '' })
         const { data } = await supabase.from('cards').select('id, name').eq('is_active', true).order('name')
         setCards(data ?? [])
         setOpen(true)
@@ -163,6 +165,17 @@ export default function AddExpenseForm() {
                   ))}
                 </select>
               </div>
+              {form.card_id && (
+                <div>
+                  <label className="label">Próxima fecha de cobro (opcional)</label>
+                  <input className="input" type="date" value={form.next_charge_date}
+                    onChange={e => set('next_charge_date', e.target.value)} />
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    Al llegar esta fecha, el cargo aparece automáticamente como deuda
+                    de la tarjeta y la fecha se recorre según el intervalo.
+                  </p>
+                </div>
+              )}
               <div className="flex gap-2 pt-1">
                 <button type="submit" disabled={loading} className="btn-primary flex-1 flex items-center justify-center gap-1.5">
                   {loading && <Loader2 size={14} className="animate-spin" />}{loading ? 'Guardando...' : 'Guardar'}
