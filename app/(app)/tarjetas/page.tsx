@@ -54,7 +54,6 @@ export default async function TarjetasPage() {
 
   // ── Armar filas por gasto con datos derivados ──
   type FullRow = ExpenseRow & {
-    cardId: string | null
     cardName: string
     purchaseDate: string
     createdAt: string

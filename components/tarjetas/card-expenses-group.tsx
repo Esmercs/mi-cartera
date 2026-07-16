@@ -5,11 +5,13 @@ import { formatMXN } from '@/lib/utils/currency'
 import { formatMXDate, paydayForPeriodEnd } from '@/lib/utils/date-utils'
 import PayInstallmentButton from './pay-installment-button'
 import DeleteExpenseButton from './delete-expense-button'
+import EditExpenseButton from './edit-expense-button'
 import MarkDebtPaidButton from '@/components/shared/mark-debt-paid-button'
 
 export interface ExpenseRow {
   id: string
   concept: string
+  cardId: string | null
   months: number
   totalAmount: number
   remaining: number
@@ -144,12 +146,24 @@ export default function CardExpensesGroup({
                     />
                   )}
                   {e.mine && (
-                    <DeleteExpenseButton
-                      id={e.id}
-                      concept={e.concept}
-                      interPersonDebtId={e.interPersonDebtId}
-                      hasPaidInstallments={e.hasPaidInstallments}
-                    />
+                    <>
+                      <EditExpenseButton
+                        id={e.id}
+                        concept={e.concept}
+                        totalAmount={e.totalAmount}
+                        months={e.months}
+                        cardId={e.cardId}
+                        interPersonDebtId={e.interPersonDebtId}
+                        hasPaidInstallments={e.hasPaidInstallments}
+                        nextDue={e.nextInstallment?.due ?? null}
+                      />
+                      <DeleteExpenseButton
+                        id={e.id}
+                        concept={e.concept}
+                        interPersonDebtId={e.interPersonDebtId}
+                        hasPaidInstallments={e.hasPaidInstallments}
+                      />
+                    </>
                   )}
                 </div>
               </div>
