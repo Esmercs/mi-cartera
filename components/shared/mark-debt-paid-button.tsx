@@ -36,9 +36,11 @@ export default function MarkDebtPaidButton({
   const remaining = isInstallment ? totalInstallments - paidInstallments : null
 
   const title = isInstallment
-    ? `Registrar cuota ${paidInstallments + 1} de ${totalInstallments}`
-    : 'Marcar deuda como pagada'
+    ? `Confirmar cuota ${paidInstallments + 1} de ${totalInstallments} recibida`
+    : 'Confirmar pago recibido'
 
+  // Solo el acreedor confirma que recibió el pago; no se registra como gasto de nadie —
+  // el deudor puede anotar su transferencia en "Ya pagado" si quiere llevar el registro.
   async function handlePay() {
     setLoading(true)
 
@@ -55,37 +57,15 @@ export default function MarkDebtPaidButton({
       update.due_date = addOneMonth(dueDate)
     }
 
-    await supabase.from('inter_person_debts').update(update).eq('id', debtId)
-
-    // Registrar en period_payments del usuario actual para que aparezca en "Ya pagado"
-    if (concept && amount) {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const today = new Date()
-        // Buscar el período activo del usuario (el más reciente con period_date >= hoy)
-        const { data: period } = await supabase
-          .from('periods')
-          .select('id')
-          .eq('owner_id', user.id)
-          .gte('period_date', today.toISOString().split('T')[0])
-          .order('period_date', { ascending: true })
-          .limit(1)
-          .single()
-
-        if (period) {
-          const installmentAmount = isInstallment ? amount : amount
-          await supabase.from('period_payments').insert({
-            period_id: period.id,
-            concept: isInstallment ? `${concept} (cuota ${(newPaid ?? paidInstallments + 1)})` : concept,
-            amount: installmentAmount,
-            payment_type: 'extra',
-          })
-        }
-      }
-    }
+    const { data } = await supabase
+      .from('inter_person_debts').update(update).eq('id', debtId).select('id')
 
     setLoading(false)
     setOpen(false)
+    if (!data?.length) {
+      alert('No se pudo confirmar: solo quien recibe el pago puede marcarlo.')
+      return
+    }
     router.refresh()
   }
 
@@ -98,21 +78,21 @@ export default function MarkDebtPaidButton({
                    rounded-lg hover:bg-green-100 transition-colors disabled:opacity-50${isInstallment ? ' whitespace-nowrap' : ''}`}
       >
         {isInstallment
-          ? `Pagar cuota (${remaining} restante${remaining === 1 ? '' : 's'})`
-          : 'Marcar pagada'}
+          ? `Confirmar cuota (${remaining} restante${remaining === 1 ? '' : 's'})`
+          : 'Confirmar pago'}
       </button>
 
       <ConfirmDialog
         open={open}
         title={title}
-        confirmLabel={isInstallment ? 'Registrar cuota' : 'Sí, marcar pagada'}
+        confirmLabel={isInstallment ? 'Sí, recibí la cuota' : 'Sí, recibí el pago'}
         tone="success"
         loading={loading}
         onConfirm={handlePay}
         onCancel={() => setOpen(false)}
         message={isInstallment
-          ? 'Se registrará la cuota y la fecha de vencimiento avanzará un mes.'
-          : 'Esto marcará la deuda como pagada y la moverá a "Ya pagado".'}
+          ? 'Se registrará la cuota recibida y la fecha de vencimiento avanzará un mes.'
+          : 'Esto marcará la deuda como pagada.'}
       >
         {concept && (
           <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">

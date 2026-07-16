@@ -14,7 +14,6 @@ import DeletePeriodPaymentButton from '@/components/dashboard/delete-period-paym
 import AddIncomeForm from '@/components/dashboard/add-income-form'
 import RegisterNextPaymentButton from '@/components/dashboard/register-next-payment-button'
 import CollapsibleCardGroup, { type LinkedDebt } from '@/components/dashboard/collapsible-card-group'
-import MarkDebtPaidButton from '@/components/shared/mark-debt-paid-button'
 import PeriodSelector from '@/components/shared/period-selector'
 
 export default async function DashboardPage({
@@ -494,14 +493,10 @@ export default async function DashboardPage({
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-sm font-semibold text-gray-800">{formatMXN(item.amount)}</span>
                       {item.type === 'deuda' && item.debtId ? (
-                        <MarkDebtPaidButton
-                          debtId={item.debtId}
-                          totalInstallments={item.totalInstallments}
-                          paidInstallments={item.paidInstallments}
-                          dueDate={item.dueDate}
-                          concept={item.concept}
-                          amount={item.amount}
-                        />
+                        // Solo quien recibe el pago (acreedor) puede confirmarlo
+                        <span className="text-xs text-gray-400 bg-gray-50 border border-gray-200 px-2 py-1 rounded-lg whitespace-nowrap">
+                          Confirma {item.creditorName ?? otherName}
+                        </span>
                       ) : (
                         <RegisterNextPaymentButton
                           periodId={activePeriodId}
@@ -598,14 +593,9 @@ export default async function DashboardPage({
                             <span className="text-sm font-semibold text-red-500">
                               {formatMXN(d.amount)}
                             </span>
-                            <MarkDebtPaidButton
-                              debtId={d.id}
-                              totalInstallments={d.total_installments ?? null}
-                              paidInstallments={d.paid_installments ?? 0}
-                              dueDate={d.due_date ?? null}
-                              concept={d.concept}
-                              amount={d.amount}
-                            />
+                            <span className="text-xs text-gray-400 bg-gray-50 border border-gray-200 px-2 py-1 rounded-lg whitespace-nowrap">
+                              Confirma {otherName}
+                            </span>
                           </div>
                         </div>
                         {d.total_installments && (

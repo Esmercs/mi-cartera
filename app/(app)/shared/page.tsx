@@ -248,15 +248,22 @@ export default async function SharedPage() {
                       ? formatMXN(debt.amount * (debt.total_installments - debt.paid_installments))
                       : formatMXN(debt.amount)}
                   </span>
-                  <MarkDebtPaidButton
-                    debtId={debt.id}
-                    creditorId={debt.creditor_id}
-                    totalInstallments={debt.total_installments ?? null}
-                    paidInstallments={debt.paid_installments ?? 0}
-                    dueDate={debt.due_date ?? null}
-                    concept={debt.concept}
-                    amount={debt.amount}
-                  />
+                  {debt.creditor_id === session.user.id ? (
+                    <MarkDebtPaidButton
+                      debtId={debt.id}
+                      creditorId={debt.creditor_id}
+                      totalInstallments={debt.total_installments ?? null}
+                      paidInstallments={debt.paid_installments ?? 0}
+                      dueDate={debt.due_date ?? null}
+                      concept={debt.concept}
+                      amount={debt.amount}
+                    />
+                  ) : (
+                    // Solo quien recibe el pago (acreedor) puede confirmarlo
+                    <span className="text-xs text-gray-400 bg-gray-50 border border-gray-200 px-2 py-1 rounded-lg whitespace-nowrap">
+                      Confirma {debt.creditor?.display_name}
+                    </span>
+                  )}
                 </div>
               </div>
             ))}
