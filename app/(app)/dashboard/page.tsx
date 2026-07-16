@@ -5,7 +5,7 @@ import { formatMXN } from '@/lib/utils/currency'
 import { formatMXDate, isOverdue, getCurrentPeriodDates, getOffsetPeriodDates } from '@/lib/utils/date-utils'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import type { PeriodSummary, InstallmentPlan, InterPersonDebt, IncomeConfig, ScheduledPayment, RecurringExpenseSplit } from '@/types/database'
+import type { PeriodSummary, InterPersonDebt, IncomeConfig, RecurringExpenseSplit, CardExpense } from '@/types/database'
 import AddPeriodPaymentForm from '@/components/dashboard/add-period-payment-form'
 import CollapsiblePaidGroup from '@/components/dashboard/collapsible-paid-group'
 import SettleInternalDebtButton from '@/components/dashboard/settle-internal-debt-button'
@@ -94,25 +94,24 @@ export default async function DashboardPage({
   const [
     { data: summary },
     { data: payments },
-    { data: installments },
+    { data: msiExpenses },
     { data: debtsOwed },
     { data: debtsToCollect },
     { data: profile },
     { data: currentIncome },
-    { data: nextScheduled },
-    { data: nextMSI },
+    { data: dueInstallments },
     { data: nextDebts },
     { data: allProjections },
   ] = await Promise.all([
     supabase.from('period_summary').select('*').eq('id', viewPeriod?.id).single() as Promise<{ data: PeriodSummary | null }>,
     supabase.from('period_payments').select('*, cards(name)').eq('period_id', viewPeriod?.id ?? '').order('paid_at', { ascending: false }),
-    supabase.from('installment_plans').select('*, cards(name)').eq('owner_id', userId).eq('is_active', true).order('next_payment_date', { ascending: true }) as Promise<{ data: InstallmentPlan[] | null }>,
+    supabase.from('card_expenses').select('*, cards(name), card_expense_installments(id, number, amount, due_period_date, is_paid)').eq('owner_id', userId).gt('months', 1) as Promise<{ data: CardExpense[] | null }>,
     supabase.from('inter_person_debts').select('*, creditor:profiles!creditor_id(display_name, full_name)').eq('debtor_id', userId).eq('is_paid', false) as Promise<{ data: InterPersonDebt[] | null }>,
     supabase.from('inter_person_debts').select('*, debtor:profiles!debtor_id(display_name, full_name), cards(name)').eq('creditor_id', userId).eq('is_paid', false) as Promise<{ data: InterPersonDebt[] | null }>,
     supabase.from('profiles').select('display_name').eq('id', userId).single(),
     supabase.from('income_config').select('amount, valid_from').eq('owner_id', userId).order('valid_from', { ascending: false }).limit(1).single() as Promise<{ data: IncomeConfig | null }>,
-    supabase.from('scheduled_payments').select('*, cards(name)').eq('owner_id', userId).eq('period_date', nextPeriodStr).eq('is_paid', false).order('payment_type', { ascending: true }) as Promise<{ data: ScheduledPayment[] | null }>,
-    supabase.from('installment_plans').select('*, cards(name)').eq('owner_id', userId).eq('is_active', true).gte('next_payment_date', nextStartStr).lte('next_payment_date', nextPeriodStr) as Promise<{ data: InstallmentPlan[] | null }>,
+    // Cuotas del ledger de tarjetas que vencen en la quincena seleccionada
+    supabase.from('card_expense_installments').select('*, expense:card_expenses(id, owner_id, concept, card_id, months, expense_type, cards(name))').eq('is_paid', false).eq('due_period_date', nextPeriodStr) as Promise<{ data: any[] | null }>,
     supabase.from('inter_person_debts').select('*, creditor:profiles!creditor_id(display_name)').eq('debtor_id', userId).eq('is_paid', false).gte('due_date', nextStartStr).lte('due_date', nextPeriodStr) as Promise<{ data: any[] | null }>,
     (supabase.from('projections') as any).select('*, cards(name)').eq('owner_id', userId).eq('is_paid', false).gte('projected_date', todayStr).order('projected_date', { ascending: true }),
   ])
@@ -194,21 +193,24 @@ export default async function DashboardPage({
   type NextItem = {
     key: string; concept: string; amount: number; card: string | null
     type: 'fijo' | 'msi' | 'programado' | 'deuda'
-    cardId: string | null; planId: string | null; scheduledId: string | null
+    cardId: string | null; installmentId: string | null
     debtId: string | null; creditorName: string | null
     totalInstallments: number | null; paidInstallments: number; dueDate: string | null
     recurringExpenseId: string | null; intervalType: string | null; currentNextPaymentDate: string | null
   }
   const nextItems: NextItem[] = [
-    ...(nextScheduled ?? []).map(p => ({
-      key: p.id, concept: p.concept, amount: p.amount,
-      card: (p as any).cards?.name ?? null,
-      type: 'programado' as const,
-      cardId: p.card_id ?? null, planId: null, scheduledId: p.id,
-      debtId: null, creditorName: null,
-      totalInstallments: null, paidInstallments: 0, dueDate: null,
-      recurringExpenseId: null, intervalType: null, currentNextPaymentDate: null,
-    })),
+    // Cuotas del ledger de tarjetas (una exhibición y MSI) que vencen esta quincena
+    ...((dueInstallments ?? []) as any[])
+      .filter(i => i.expense?.owner_id === userId && i.expense?.expense_type === 'compra')
+      .map(i => ({
+        key: i.id as string, concept: i.expense.concept as string, amount: i.amount as number,
+        card: i.expense.cards?.name ?? null,
+        type: (i.expense.months > 1 ? 'msi' : 'programado') as 'msi' | 'programado',
+        cardId: (i.expense.card_id ?? null) as string | null, installmentId: i.id as string,
+        debtId: null, creditorName: null,
+        totalInstallments: null, paidInstallments: 0, dueDate: null,
+        recurringExpenseId: null, intervalType: null, currentNextPaymentDate: null,
+      })),
     ...(nextFijos)
       .filter(e => !paidKeys.has(`${e.concept}|${e.card_id ?? ''}`))
       // Si es shared y lo paga el otro, no aparece en mi lista (queda como deuda interna)
@@ -225,7 +227,7 @@ export default async function DashboardPage({
         key: e.id, concept: e.concept,
         amount,
         card: cardName, type: 'fijo' as const,
-        cardId: e.card_id ?? null, planId: null, scheduledId: null,
+        cardId: e.card_id ?? null, installmentId: null,
         debtId: null, creditorName: null,
         totalInstallments: null, paidInstallments: 0, dueDate: null,
         recurringExpenseId: isDateBased ? e.id : null,
@@ -233,19 +235,10 @@ export default async function DashboardPage({
         currentNextPaymentDate: isDateBased ? (e.next_payment_date ?? null) : null,
       }
     }),
-    ...(nextMSI ?? []).map(p => ({
-      key: p.id, concept: p.concept, amount: p.monthly_amount,
-      card: (p as any).cards?.name ?? null,
-      type: 'msi' as const,
-      cardId: p.card_id ?? null, planId: p.id, scheduledId: null,
-      debtId: null, creditorName: null,
-      totalInstallments: null, paidInstallments: 0, dueDate: null,
-      recurringExpenseId: null, intervalType: null, currentNextPaymentDate: null,
-    })),
     ...(nextDebts ?? []).map(d => ({
       key: d.id, concept: d.concept, amount: d.amount,
       card: null, type: 'deuda' as const,
-      cardId: null, planId: null, scheduledId: null,
+      cardId: null, installmentId: null,
       debtId: d.id, creditorName: d.creditor?.display_name ?? null,
       totalInstallments: d.total_installments ?? null,
       paidInstallments: d.paid_installments ?? 0,
@@ -288,7 +281,24 @@ export default async function DashboardPage({
     }
   }
 
-  const totalMSI = (installments ?? []).reduce((sum, p) => sum + p.monthly_amount, 0)
+  // MSIs activos desde el ledger: gastos a meses con cuotas pendientes
+  const msiActive = (msiExpenses ?? []).flatMap(e => {
+    const insts = e.card_expense_installments ?? []
+    const unpaid = insts.filter(i => !i.is_paid)
+      .sort((a, b) => (a.due_period_date ?? '9999').localeCompare(b.due_period_date ?? '9999'))
+    if (!unpaid.length) return []
+    const paidCount = insts.filter(i => i.is_paid).length
+    return [{
+      id: e.id,
+      concept: e.concept,
+      cardName: e.cards?.name ?? '—',
+      monthly: unpaid[0].amount,
+      currentMonth: Math.min(paidCount + 1, e.months),
+      totalMonths: e.months,
+      nextDate: unpaid[0].due_period_date,
+    }]
+  })
+  const totalMSI = msiActive.reduce((sum, p) => sum + p.monthly, 0)
   // Lo que pesa en la quincena: para deudas a cuotas solo una mensualidad (d.amount);
   // para deudas sin cuotas, d.amount ya es el total
   const debtPending = (d: InterPersonDebt) => d.amount
@@ -499,8 +509,7 @@ export default async function DashboardPage({
                           amount={item.amount}
                           cardId={item.cardId}
                           type={item.type as 'fijo' | 'msi' | 'programado'}
-                          planId={item.planId}
-                          scheduledId={item.scheduledId}
+                          installmentId={item.installmentId}
                           recurringExpenseId={item.recurringExpenseId}
                           intervalType={item.intervalType as any}
                           currentNextPaymentDate={item.currentNextPaymentDate}
@@ -764,8 +773,8 @@ export default async function DashboardPage({
         )}
       </div>
 
-      {/* ── MSIs activos ── */}
-      {(installments?.length ?? 0) > 0 && (
+      {/* ── MSIs activos (del ledger de tarjetas) ── */}
+      {msiActive.length > 0 && (
         <div className="card p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-gray-800 text-sm">Meses sin intereses</h2>
@@ -774,18 +783,18 @@ export default async function DashboardPage({
             </span>
           </div>
           <div className="space-y-0">
-            {installments!.map(plan => (
+            {msiActive.map(plan => (
               <div key={plan.id} className="flex items-center justify-between py-2.5 border-b last:border-0">
                 <div className="min-w-0 flex-1 mr-3">
                   <p className="text-sm font-medium text-gray-800 truncate">{plan.concept}</p>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {(plan as any).cards?.name ?? '—'} · cuota {plan.current_month}/{plan.total_months}
+                    {plan.cardName} · cuota {plan.currentMonth}/{plan.totalMonths}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-sm font-semibold text-gray-800">{formatMXN(plan.monthly_amount)}</p>
-                  <p className={`text-xs mt-0.5 ${isOverdue(plan.next_payment_date) ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
-                    {formatMXDate(plan.next_payment_date)}
+                  <p className="text-sm font-semibold text-gray-800">{formatMXN(plan.monthly)}</p>
+                  <p className={`text-xs mt-0.5 ${isOverdue(plan.nextDate) ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+                    {formatMXDate(plan.nextDate)}
                   </p>
                 </div>
               </div>

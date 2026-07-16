@@ -5,6 +5,7 @@ import { CheckCircle, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatMXN } from '@/lib/utils/currency'
 import { nextPaymentDate } from '@/lib/utils/date-utils'
+import { payInstallment } from '@/lib/utils/pay-installment'
 import type { IntervalType } from '@/types/database'
 
 interface Props {
@@ -13,8 +14,7 @@ interface Props {
   amount: number
   cardId: string | null
   type: 'fijo' | 'msi' | 'programado'
-  planId: string | null
-  scheduledId: string | null
+  installmentId: string | null
   // For date-based recurring expenses (bimestral, trimestral, anual, c/21 dias, c/15 dias)
   recurringExpenseId?: string | null
   intervalType?: IntervalType | null
@@ -22,7 +22,7 @@ interface Props {
 }
 
 export default function RegisterNextPaymentButton({
-  periodId, concept, amount, cardId, type, planId, scheduledId,
+  periodId, concept, amount, cardId, type, installmentId,
   recurringExpenseId, intervalType, currentNextPaymentDate,
 }: Props) {
   const router = useRouter()
@@ -50,34 +50,10 @@ export default function RegisterNextPaymentButton({
       paid_at:      new Date().toISOString(),
     })
 
-    if (type === 'msi' && planId) {
-      await supabase.from('installment_payments').insert({
-        plan_id: planId,
-        amount:  paid,
-        paid_at: new Date().toISOString().split('T')[0],
-      })
-      // Advance next_payment_date so the plan leaves the "próxima quincena" range
-      const { data: plan } = await supabase
-        .from('installment_plans').select('next_payment_date').eq('id', planId).single()
-      if (plan?.next_payment_date) {
-        await supabase.from('installment_plans')
-          .update({ next_payment_date: nextPaymentDate(plan.next_payment_date, 'mensual') })
-          .eq('id', planId)
-      }
-    }
-
-    if (type === 'programado' && scheduledId) {
-      await supabase
-        .from('scheduled_payments')
-        .update({ is_paid: true, paid_at: new Date().toISOString() })
-        .eq('id', scheduledId)
-
-      if (cardId) {
-        const { data: card } = await supabase
-          .from('cards').select('current_balance').eq('id', cardId).single()
-        const newBalance = Math.max(0, (card?.current_balance ?? 0) - paid)
-        await supabase.from('cards').update({ current_balance: newBalance }).eq('id', cardId)
-      }
+    // Cuota del ledger de tarjetas: el saldo de la tarjeta se deriva solo
+    if ((type === 'msi' || type === 'programado') && installmentId) {
+      const ok = await payInstallment(supabase, installmentId, paid)
+      if (!ok) alert('No se pudo marcar la cuota como pagada (bloqueado por permisos).')
     }
 
     // For date-based recurring expenses: advance next_payment_date by the interval

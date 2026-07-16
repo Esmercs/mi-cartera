@@ -4,15 +4,14 @@ import { useRouter } from 'next/navigation'
 import { CreditCard, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatMXN } from '@/lib/utils/currency'
-import { nextPaymentDate } from '@/lib/utils/date-utils'
+import { payInstallment } from '@/lib/utils/pay-installment'
 
 interface Item {
   concept: string
   amount: number
   cardId: string | null
   type: 'fijo' | 'msi' | 'programado' | 'deuda'
-  planId: string | null
-  scheduledId: string | null
+  installmentId: string | null
 }
 
 interface Props {
@@ -41,27 +40,26 @@ export default function PayCardGroupButton({ periodId, cardName, items, totalAmo
     const isPartial = paid < totalAmount
 
     if (isPartial) {
-      // Pago parcial: registrar un solo movimiento por el monto ingresado
-      const cardId = items[0]?.cardId ?? null
+      // Pago parcial: un solo movimiento por el monto ingresado
       await supabase.from('period_payments').insert({
         period_id:    periodId,
         concept:      `Pago parcial ${cardName}`,
         amount:       paid,
-        card_id:      cardId,
+        card_id:      items[0]?.cardId ?? null,
         payment_type: 'fijo',
         paid_at:      new Date().toISOString(),
       })
-      // Reducir balance de la tarjeta
-      if (cardId) {
-        const { data: card } = await supabase.from('cards').select('current_balance').eq('id', cardId).single()
-        const newBalance = Math.max(0, (card?.current_balance ?? 0) - paid)
-        await supabase.from('cards').update({ current_balance: newBalance }).eq('id', cardId)
+      // Aplicar el pago a las cuotas en orden: completas mientras alcance,
+      // la última que no alcanza se parte (el resto queda pendiente)
+      let remaining = paid
+      for (const item of items) {
+        if (!item.installmentId || remaining < 0.01) continue
+        const pay = Math.min(remaining, item.amount)
+        await payInstallment(supabase, item.installmentId, pay)
+        remaining = Math.round((remaining - pay) * 100) / 100
       }
     } else {
-      // Pago completo: registrar cada ítem y reducir balance de tarjeta
-      // Agrupar reducción por tarjeta para hacer un solo UPDATE por card
-      const balanceReductions = new Map<string, number>()
-
+      // Pago completo: registrar cada ítem y marcar su cuota
       for (const item of items) {
         await supabase.from('period_payments').insert({
           period_id:    periodId,
@@ -71,40 +69,9 @@ export default function PayCardGroupButton({ periodId, cardName, items, totalAmo
           payment_type: item.type === 'msi' ? 'extra' : 'fijo',
           paid_at:      new Date().toISOString(),
         })
-
-        if (item.type === 'msi' && item.planId) {
-          await supabase.from('installment_payments').insert({
-            plan_id: item.planId,
-            amount:  item.amount,
-            paid_at: new Date().toISOString().split('T')[0],
-          })
-          // Advance next_payment_date so the plan leaves the "próxima quincena" range
-          const { data: plan } = await supabase
-            .from('installment_plans').select('next_payment_date').eq('id', item.planId).single()
-          if (plan?.next_payment_date) {
-            await supabase.from('installment_plans')
-              .update({ next_payment_date: nextPaymentDate(plan.next_payment_date, 'mensual') })
-              .eq('id', item.planId)
-          }
+        if (item.installmentId) {
+          await payInstallment(supabase, item.installmentId, item.amount)
         }
-
-        if (item.type === 'programado' && item.scheduledId) {
-          await supabase
-            .from('scheduled_payments')
-            .update({ is_paid: true, paid_at: new Date().toISOString() })
-            .eq('id', item.scheduledId)
-        }
-
-        if (item.cardId) {
-          balanceReductions.set(item.cardId, (balanceReductions.get(item.cardId) ?? 0) + item.amount)
-        }
-      }
-
-      // Aplicar reducciones de balance agrupadas por tarjeta
-      for (const [cardId, reduction] of balanceReductions) {
-        const { data: card } = await supabase.from('cards').select('current_balance').eq('id', cardId).single()
-        const newBalance = Math.max(0, (card?.current_balance ?? 0) - reduction)
-        await supabase.from('cards').update({ current_balance: newBalance }).eq('id', cardId)
       }
     }
 

@@ -9,7 +9,6 @@ import {
   PartyPopper,
   ShieldCheck,
   LogOut,
-  Wallet,
   Target,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -27,9 +26,8 @@ const navItems: NavItem[] = [
   { href: '/dashboard',    label: 'Mi Dashboard',      icon: <LayoutDashboard size={18} /> },
   { href: '/shared',       label: 'Compartido',         icon: <Users size={18} /> },
   { href: '/gastos-fijos', label: 'Gastos',              icon: <CalendarDays size={18} /> },
-  { href: '/financiamiento', label: 'Financiamiento',   icon: <CreditCard size={18} /> },
+  { href: '/tarjetas',     label: 'Tarjetas',           icon: <CreditCard size={18} /> },
   { href: '/diversion',    label: 'Diversión',          icon: <PartyPopper size={18} /> },
-  { href: '/deudas',       label: 'Deudas',             icon: <Wallet size={18} /> },
   { href: '/proyectos',    label: 'Proyectos',          icon: <Target size={18} /> },
   { href: '/admin/requests', label: 'Admin',            icon: <ShieldCheck size={18} />, adminOnly: true },
 ]
