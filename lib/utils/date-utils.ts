@@ -152,6 +152,20 @@ export function getOffsetPeriodDates(offset: number): {
   }
 }
 
+// Fin de quincena que contiene una fecha.
+// GEMELA de quincena_end() en supabase/migrations/023_tarjetas.sql — si cambia una, cambia la otra.
+//   D <= 14      → día 14 del mismo mes
+//   14 < D < ld  → día ld-1 del mismo mes
+//   D = ld       → día 14 del mes siguiente
+export function periodEndForDate(input: string | Date): string {
+  const d = typeof input === 'string' ? parseISO(input) : input
+  const y = d.getFullYear(), m = d.getMonth(), day = d.getDate()
+  const ld = new Date(y, m + 1, 0).getDate()
+  if (day <= 14) return format(new Date(y, m, 14), 'yyyy-MM-dd')
+  if (day < ld)  return format(new Date(y, m, ld - 1), 'yyyy-MM-dd')
+  return format(new Date(y, m + 1, 14), 'yyyy-MM-dd')
+}
+
 // Used by deudas page — returns start/end of next upcoming quincena
 export function getNextPeriodDates(): { start: Date; end: Date; label: string } {
   const { start, end, label } = getOffsetPeriodDates(1)

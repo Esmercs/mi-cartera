@@ -175,6 +175,38 @@ export interface ScheduledPayment {
   cards?: { name: string } | null
 }
 
+export interface CardExpenseInstallment {
+  id: string
+  expense_id: string
+  number: number
+  amount: number
+  due_period_date: string | null
+  is_paid: boolean
+  paid_at: string | null
+  created_at: string
+}
+
+export interface CardExpense {
+  id: string
+  owner_id: string
+  card_id: string | null
+  concept: string
+  total_amount: number
+  purchase_date: string
+  months: number
+  expense_type: 'compra' | 'ajuste'
+  is_shared: boolean
+  shared_pct: number | null
+  inter_person_debt_id: string | null
+  source: string
+  source_id: string | null
+  notes: string | null
+  created_at: string
+  // joined
+  cards?: { name: string } | null
+  card_expense_installments?: CardExpenseInstallment[]
+}
+
 export interface InternalDebtSettlement {
   id: string
   recurring_expense_id: string
