@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
-import { formatMXDate, isOverdue, getCurrentPeriodDates, getOffsetPeriodDates } from '@/lib/utils/date-utils'
+import { formatMXDate, isOverdue, getCurrentPeriodDates, getOffsetPeriodDates, paydayForPeriodEnd } from '@/lib/utils/date-utils'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import type { PeriodSummary, InterPersonDebt, IncomeConfig, RecurringExpenseSplit, CardExpense } from '@/types/database'
@@ -793,8 +793,8 @@ export default async function DashboardPage({
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-sm font-semibold text-gray-800">{formatMXN(plan.monthly)}</p>
-                  <p className={`text-xs mt-0.5 ${isOverdue(plan.nextDate) ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
-                    {formatMXDate(plan.nextDate)}
+                  <p className={`text-xs mt-0.5 ${isOverdue(paydayForPeriodEnd(plan.nextDate)) ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+                    {formatMXDate(paydayForPeriodEnd(plan.nextDate))}
                   </p>
                 </div>
               </div>

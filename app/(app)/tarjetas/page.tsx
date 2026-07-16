@@ -2,8 +2,8 @@ export const dynamic = 'force-dynamic'
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
-import { formatMXDate, getNextPeriodDates } from '@/lib/utils/date-utils'
-import { format } from 'date-fns'
+import { formatMXDate, getCurrentPeriodDates, paydayForPeriodEnd } from '@/lib/utils/date-utils'
+import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import type { Card, CardExpense, CardExpenseInstallment } from '@/types/database'
 import AddExpenseForm from '@/components/tarjetas/add-expense-form'
@@ -38,9 +38,13 @@ export default async function TarjetasPage() {
   ])
 
   const todayStr = format(new Date(), 'yyyy-MM-dd')
-  const { end: nextEnd } = getNextPeriodDates()
-  const nextPeriodStr = format(nextEnd, 'yyyy-MM-dd')
-  const nextLabel = format(nextEnd, "d 'de' MMMM", { locale: es })
+  // Quincena en curso: lo que se paga con el pago actual (día 15 o fin de mes)
+  const { end: currentEnd } = getCurrentPeriodDates()
+  const currentPeriodStr = format(currentEnd, 'yyyy-MM-dd')
+  const currentPayday = paydayForPeriodEnd(currentPeriodStr)
+  const currentLabel = currentPayday
+    ? format(parseISO(currentPayday), "d 'de' MMMM", { locale: es })
+    : ''
 
   // ── Armar filas por gasto con datos derivados ──
   type FullRow = ExpenseRow & {
@@ -68,7 +72,8 @@ export default async function TarjetasPage() {
       sharedPct: e.shared_pct,
       expenseType: e.expense_type,
       mine: e.owner_id === userId,
-      overdue: !!next?.due_period_date && next.due_period_date < todayStr,
+      // Vencida = ya pasó su día de pago (no el fin de la quincena)
+      overdue: !!next?.due_period_date && (paydayForPeriodEnd(next.due_period_date) ?? '9999') < todayStr,
       interPersonDebtId: e.inter_person_debt_id,
       hasPaidInstallments: paidInsts.length > 0,
       nextInstallment: next ? { id: next.id, amount: next.amount, due: next.due_period_date } : null,
@@ -110,9 +115,11 @@ export default async function TarjetasPage() {
       ? [{ row: r, inst: r.nextInstallment }]
       : []
   )
-  const nextQuincena = allUnpaid.filter(x => x.inst.due === nextPeriodStr)
+  const nextQuincena = allUnpaid.filter(x => x.inst.due === currentPeriodStr)
   const totalNextQuincena = Math.round(nextQuincena.reduce((s, x) => s + x.inst.amount, 0) * 100) / 100
-  const overdueItems = allUnpaid.filter(x => x.inst.due && x.inst.due < todayStr)
+  const overdueItems = allUnpaid.filter(x =>
+    x.inst.due && x.inst.due !== currentPeriodStr
+    && (paydayForPeriodEnd(x.inst.due) ?? '9999') < todayStr)
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -144,9 +151,9 @@ export default async function TarjetasPage() {
             )}
           </div>
           <div className="p-4 bg-blue-50/50">
-            <p className="text-xs font-medium text-blue-400 uppercase tracking-wide">Próxima quincena</p>
+            <p className="text-xs font-medium text-blue-400 uppercase tracking-wide">Esta quincena</p>
             <p className="text-2xl font-bold text-blue-700 mt-1">{formatMXN(totalNextQuincena)}</p>
-            <p className="text-xs text-gray-400 mt-1">pagos al {nextLabel}</p>
+            <p className="text-xs text-gray-400 mt-1">pago del {currentLabel}</p>
           </div>
         </div>
       </div>
@@ -160,7 +167,7 @@ export default async function TarjetasPage() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-gray-800 truncate">{row.concept}</p>
                 <p className="text-xs text-red-500">
-                  {row.cardName} · venció {formatMXDate(inst.due)}
+                  {row.cardName} · venció {formatMXDate(paydayForPeriodEnd(inst.due))}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">

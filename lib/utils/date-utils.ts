@@ -166,6 +166,19 @@ export function periodEndForDate(input: string | Date): string {
   return format(new Date(y, m + 1, 14), 'yyyy-MM-dd')
 }
 
+// Día de pago (inicio de quincena) correspondiente a un fin de quincena canónico.
+// Las cuotas se guardan con el FIN de quincena (14 / ld-1) pero Eduardo piensa en
+// el DÍA DE PAGO (15 / último día del mes) — esta función traduce para la UI.
+//   end día 14   → payday = último día del mes anterior
+//   end día ld-1 → payday = día 15 del mismo mes
+export function paydayForPeriodEnd(end: string | null | undefined): string | null {
+  if (!end) return null
+  const d = parseISO(end)
+  const y = d.getFullYear(), m = d.getMonth()
+  if (d.getDate() === 14) return format(new Date(y, m, 0), 'yyyy-MM-dd')
+  return format(new Date(y, m, 15), 'yyyy-MM-dd')
+}
+
 // Used by deudas page — returns start/end of next upcoming quincena
 export function getNextPeriodDates(): { start: Date; end: Date; label: string } {
   const { start, end, label } = getOffsetPeriodDates(1)

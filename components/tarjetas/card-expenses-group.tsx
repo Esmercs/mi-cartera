@@ -2,7 +2,7 @@
 import { useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { formatMXN } from '@/lib/utils/currency'
-import { formatMXDate } from '@/lib/utils/date-utils'
+import { formatMXDate, paydayForPeriodEnd } from '@/lib/utils/date-utils'
 import PayInstallmentButton from './pay-installment-button'
 import DeleteExpenseButton from './delete-expense-button'
 
@@ -109,7 +109,7 @@ export default function CardExpensesGroup({
                     )}
                     {e.nextInstallment?.due && (
                       <span className={e.overdue ? 'text-red-500 font-semibold' : ''}>
-                        {e.overdue ? '⚠ ' : ''}Pago: {formatMXDate(e.nextInstallment.due)}
+                        {e.overdue ? '⚠ ' : ''}Pago: {formatMXDate(paydayForPeriodEnd(e.nextInstallment.due))}
                       </span>
                     )}
                   </p>

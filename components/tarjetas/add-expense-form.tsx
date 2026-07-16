@@ -20,7 +20,9 @@ export default function AddExpenseForm() {
   const [error, setError] = useState<string | null>(null)
 
   const todayStr = format(new Date(), 'yyyy-MM-dd')
-  const nextPeriodStr = format(getNextPeriodDates().end, 'yyyy-MM-dd')
+  // Default: el próximo día de pago (15 o fin de mes) — la fecha que elija el
+  // usuario se mapea de todos modos a la quincena que la contiene
+  const nextPeriodStr = format(getNextPeriodDates().start, 'yyyy-MM-dd')
 
   const [form, setForm] = useState({
     concept: '',
