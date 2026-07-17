@@ -32,7 +32,7 @@ export default async function AnalisisPage() {
     supabase.from('recurring_expenses_split').select('*').in('ownership', [myOwnership, 'shared']) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.rpc('get_split_percentages').single() as unknown as Promise<{ data: { lalo_pct: number; ale_pct: number } | null }>,
     supabase.from('fun_expenses').select('amount, expense_date').gte('expense_date', threeMonthsAgo) as Promise<{ data: { amount: number }[] | null }>,
-    supabase.from('card_expenses').select('concept, expense_type, months, category, card_expense_installments(amount, due_period_date, is_paid)').eq('owner_id', userId).eq('expense_type', 'compra') as Promise<{ data: any[] | null }>,
+    supabase.from('card_expenses').select('concept, expense_type, months, category, source, card_expense_installments(amount, due_period_date, is_paid)').eq('owner_id', userId).eq('expense_type', 'compra') as Promise<{ data: any[] | null }>,
     supabase.from('project_payments').select('amount, paid_at').eq('owner_id', userId).gte('paid_at', threeMonthsAgo) as Promise<{ data: { amount: number }[] | null }>,
   ])
 
@@ -63,6 +63,9 @@ export default async function AnalisisPage() {
   const variables: { concept: string; monthly: number; category: string }[] = []
   const msiItems: { concept: string; monthly: number }[] = []
   for (const e of cardExpenses ?? []) {
+    // Los cargos de tarjeta generados por fijos domiciliados ya están contados
+    // como fijos en su categoría — incluirlos aquí los duplicaría
+    if (e.source?.startsWith('recurring-')) continue
     const insts = e.card_expense_installments ?? []
     const windowSum = insts
       .filter((i: any) => monthWindow.has((i.due_period_date ?? '').slice(0, 7)))
