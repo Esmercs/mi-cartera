@@ -51,7 +51,7 @@ export default async function AnalisisPage({
     supabase.from('recurring_expenses_split').select('*').in('ownership', [myOwnership, 'shared']) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.rpc('get_split_percentages').single() as unknown as Promise<{ data: { lalo_pct: number; ale_pct: number } | null }>,
     supabase.from('fun_expenses').select('amount, expense_date').gte('expense_date', windowStart).lt('expense_date', windowEndExcl) as Promise<{ data: { amount: number }[] | null }>,
-    supabase.from('card_expenses').select('concept, expense_type, months, category, source, card_expense_installments(amount, due_period_date, is_paid)').eq('owner_id', userId).eq('expense_type', 'compra') as Promise<{ data: any[] | null }>,
+    supabase.from('card_expenses').select('concept, expense_type, months, category, source, card_expense_installments(amount, due_period_date, is_paid, paid_at)').eq('owner_id', userId).eq('expense_type', 'compra') as Promise<{ data: any[] | null }>,
     supabase.from('project_payments').select('amount, paid_at').eq('owner_id', userId).gte('paid_at', windowStart).lt('paid_at', windowEndExcl) as Promise<{ data: { amount: number }[] | null }>,
   ])
 
@@ -74,7 +74,10 @@ export default async function AnalisisPage({
   const funTotal = (funRows ?? []).reduce((s, f) => s + f.amount, 0)
   const diversionMonthly = Math.round((funTotal / monthsCount) * (myPct / 100) * 100) / 100
 
-  // Gasto de tarjetas en el rango, por categoría (cuotas con vencimiento dentro del rango)
+  // Gasto de tarjetas en el rango, por categoría. El mes efectivo de una cuota
+  // es cuándo se PAGÓ si ya está pagada; su vencimiento programado si sigue pendiente.
+  const instMonth = (i: any) =>
+    ((i.is_paid && i.paid_at) ? String(i.paid_at) : (i.due_period_date ?? '')).slice(0, 7)
   const variables: { concept: string; monthly: number; category: string }[] = []
   const msiItems: { concept: string; monthly: number }[] = []
   for (const e of cardExpenses ?? []) {
@@ -83,7 +86,7 @@ export default async function AnalisisPage({
     if (e.source?.startsWith('recurring-')) continue
     const insts = e.card_expense_installments ?? []
     const windowSum = insts
-      .filter((i: any) => monthSet.has((i.due_period_date ?? '').slice(0, 7)))
+      .filter((i: any) => monthSet.has(instMonth(i)))
       .reduce((s: number, i: any) => s + i.amount, 0)
     if (windowSum < 0.01) continue
     const monthly = Math.round((windowSum / monthsCount) * 100) / 100
