@@ -39,20 +39,23 @@ export default function AddExpenseForm() {
       .from('profiles').select('display_name').eq('id', user!.id).single()
     const isLalo = (profile as any)?.display_name?.toLowerCase() === 'lalo'
 
-    const [{ data: cardData }, { data: profiles }, { data: splits }] = await Promise.all([
+    const [{ data: cardData }, { data: profiles }, { data: splitRow }] = await Promise.all([
       supabase.from('cards').select('id, name')
         .in('ownership', [isLalo ? 'lalo' : 'ale', 'shared'])
         .eq('is_active', true).order('name'),
       supabase.from('profiles').select('id, display_name').eq('status', 'approved'),
-      supabase.rpc('get_split_percentages'),
+      supabase.rpc('get_split_percentages').single() as unknown as Promise<{ data: { lalo_pct: number; ale_pct: number } | null }>,
     ])
 
     const other = (profiles ?? []).find(p => p.id !== user!.id)
-    const otherSplit = ((splits ?? []) as any[]).find(s => s.owner_id === other?.id)
+    // El RPC regresa una sola fila { lalo_pct, ale_pct }; la parte de la pareja
+    // es su porcentaje según ingresos
+    const otherIsLalo = other?.display_name?.toLowerCase() === 'lalo'
+    const otherPct = splitRow ? Number(otherIsLalo ? splitRow.lalo_pct : splitRow.ale_pct) : 50
     setPartner(other ? {
       id: other.id,
       name: other.display_name ?? 'Pareja',
-      pct: otherSplit ? Number(otherSplit.percentage) : 50,
+      pct: otherPct,
     } : null)
 
     setCards(cardData ?? [])
