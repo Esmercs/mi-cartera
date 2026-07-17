@@ -161,6 +161,9 @@ export default async function AnalisisPage() {
       {analysis.groups.map(g => {
         const groupColor = g.status === 'ok' ? 'bg-green-500' : g.status === 'warn' ? 'bg-amber-400' : 'bg-red-500'
         const groupText  = g.status === 'ok' ? 'text-green-600' : g.status === 'warn' ? 'text-amber-600' : 'text-red-600'
+        // Presupuesto del bloque en pesos, según el ingreso actual
+        const capMoney = Math.round((monthlyIncome * g.cap) / 100)
+        const rest = Math.round((capMoney - g.monthly) * 100) / 100
         return (
           <section key={g.key} className="card p-4 md:p-5 space-y-1">
             <div className="flex items-center justify-between">
@@ -168,7 +171,17 @@ export default async function AnalisisPage() {
               <span className="text-xs">
                 <span className={`font-bold ${groupText}`}>{g.pct.toFixed(1)}%</span>
                 <span className="text-gray-400"> / {g.key === 'ahorro_deudas' ? '' : 'máx '}{g.cap}%</span>
-                <span className="text-gray-500 font-medium ml-2">{formatMXN(g.monthly)}/mes</span>
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs pb-0.5">
+              <span className="text-gray-500">
+                {formatMXN(g.monthly)}/mes de un presupuesto de{' '}
+                <span className="font-semibold text-gray-700">{formatMXN(capMoney)}</span>
+              </span>
+              <span className={`font-medium ${rest >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {g.key === 'ahorro_deudas'
+                  ? (rest >= 0 ? `espacio libre: ${formatMXN(rest)}` : `excedido por ${formatMXN(-rest)}`)
+                  : (rest >= 0 ? `puedes gastar ${formatMXN(rest)} más` : `excedido por ${formatMXN(-rest)}`)}
               </span>
             </div>
             <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden relative">
