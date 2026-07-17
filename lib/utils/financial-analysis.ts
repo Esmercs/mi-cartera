@@ -41,11 +41,14 @@ export interface Benchmark {
   why: string
 }
 
+// Los topes forman un presupuesto COMPLETO: suman exactamente 100% del ingreso
+// (90% de gasto + 10% de ahorro). Si respetas todos, el mes cierra en ceros
+// con tu ahorro incluido.
 export const BENCHMARKS: Benchmark[] = [
   {
-    key: 'vivienda_servicios', label: 'Vivienda y servicios', cap: 35,
+    key: 'vivienda_servicios', label: 'Vivienda y servicios', cap: 30,
     categories: ['vivienda', 'servicios'],
-    why: 'Renta, luz, agua, gas e internet no deberían rebasar el 35% del ingreso; arriba de eso el resto del presupuesto se asfixia.',
+    why: 'Renta, luz, agua, gas e internet no deberían rebasar el 30% del ingreso; arriba de eso el resto del presupuesto se asfixia.',
   },
   {
     key: 'alimentacion', label: 'Alimentación', cap: 15,
@@ -58,19 +61,19 @@ export const BENCHMARKS: Benchmark[] = [
     why: 'Auto, gasolina y seguro; más del 15% indica un auto caro para el ingreso actual.',
   },
   {
-    key: 'suscripciones', label: 'Suscripciones', cap: 5,
+    key: 'suscripciones', label: 'Suscripciones', cap: 4,
     categories: ['suscripciones'],
-    why: 'Streaming y servicios digitales son el gasto hormiga clásico: 5% es un tope generoso.',
+    why: 'Streaming y servicios digitales son el gasto hormiga clásico: 4% es un tope generoso.',
   },
   {
-    key: 'salud', label: 'Salud', cap: 10,
+    key: 'salud', label: 'Salud', cap: 5,
     categories: ['salud'],
-    why: 'Seguros y gastos médicos recurrentes; hasta 10% es razonable como prevención.',
+    why: 'Seguros y gastos médicos recurrentes como prevención.',
   },
   {
-    key: 'mascotas', label: 'Mascotas', cap: 5,
+    key: 'mascotas', label: 'Mascotas', cap: 3,
     categories: ['mascotas'],
-    why: 'Croquetas, veterinario y accesorios; arriba del 5% conviene un fondo dedicado para absorber los picos.',
+    why: 'Croquetas, veterinario y accesorios; arriba del 3% conviene un fondo dedicado para absorber los picos.',
   },
   {
     key: 'ropa', label: 'Ropa', cap: 5,
@@ -78,7 +81,7 @@ export const BENCHMARKS: Benchmark[] = [
     why: 'Ropa y calzado se recomienda mantenerlos alrededor del 5% del ingreso.',
   },
   {
-    key: 'hogar', label: 'Hogar', cap: 5,
+    key: 'hogar', label: 'Hogar', cap: 3,
     categories: ['hogar'],
     why: 'Artículos de limpieza y mantenimiento de la casa.',
   },

@@ -188,8 +188,9 @@ export default async function AnalisisPage() {
       </section>
 
       <p className="text-xs text-gray-300 px-1">
-        Guías generales de finanzas personales (regla 50/30/20 y topes por categoría) —
-        ajústalas a tu realidad. Diversión y ahorro usan el promedio real de los últimos 3 meses.
+        Los topes forman un presupuesto completo: suman exactamente 100% de tu ingreso
+        (90% de gasto + 10% de ahorro). Son guías generales — ajústalas a tu realidad.
+        Diversión y ahorro usan el promedio real de los últimos 3 meses.
       </p>
     </div>
   )
