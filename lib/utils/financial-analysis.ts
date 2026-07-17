@@ -164,12 +164,14 @@ export function analyzeFinances(input: AnalysisInput): AnalysisResult {
       monthly = input.ahorroMonthly
       items = monthly > 0 ? [{ concept: 'Abonos a proyectos (prom. 3 meses)', monthly }] : []
     } else if (b.key === 'diversion') {
-      // Diversión usa el gasto real del módulo además de fijos/extras etiquetados
+      // El fijo "Diversión" es el APORTE al presupuesto y fun_expenses es el gasto
+      // real de ese mismo dinero — contar ambos duplica. Se toma el mayor de los dos.
       const tagged = allSpend.filter(f => f.category === 'diversion')
-      monthly = input.diversionMonthly + tagged.reduce((s, f) => s + f.monthly, 0)
+      const aporte = tagged.reduce((s, f) => s + f.monthly, 0)
+      monthly = Math.max(input.diversionMonthly, aporte)
       items = [
-        ...(input.diversionMonthly > 0 ? [{ concept: 'Diversión (prom. 3 meses, tu parte)', monthly: input.diversionMonthly }] : []),
-        ...tagged.map(f => ({ concept: f.concept, monthly: f.monthly })),
+        ...(input.diversionMonthly > 0 ? [{ concept: 'Gasto real del módulo (prom. 3 meses, tu parte)', monthly: input.diversionMonthly }] : []),
+        ...tagged.map(f => ({ concept: `${f.concept} (aporte al presupuesto)`, monthly: f.monthly })),
       ]
     } else {
       const mine = allSpend.filter(f => b.categories.includes(f.category))

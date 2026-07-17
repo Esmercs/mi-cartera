@@ -140,6 +140,10 @@ export default async function AnalisisPage() {
           <span className="text-xs text-gray-400">carga mensual de compras a meses</span>
         </div>
         <CategoryBucketRow bucket={analysis.msi} />
+        <p className="text-[10px] text-gray-300">
+          Estas cuotas ya están repartidas en las categorías de abajo — este indicador
+          mide cómo pagas, no en qué gastas; no se suma al total.
+        </p>
       </section>
 
       {/* Recomendaciones */}
@@ -168,6 +172,16 @@ export default async function AnalisisPage() {
           <CategoryBucketRow key={b.key} bucket={b} />
         ))}
         {analysis.otros && <CategoryBucketRow bucket={analysis.otros} informational />}
+        {/* Total verificable: gasto comprometido + ahorro */}
+        <div className="flex items-center justify-between pt-2 text-sm font-bold text-gray-700">
+          <span>Total (gasto + ahorro)</span>
+          <span>
+            {(analysis.committedPct + (monthlyIncome > 0 ? (ahorroMonthly / monthlyIncome) * 100 : 0)).toFixed(1)}%
+            <span className="text-gray-400 font-medium ml-2">
+              {formatMXN(analysis.committedMonthly + ahorroMonthly)}/mes
+            </span>
+          </span>
+        </div>
       </section>
 
       <p className="text-xs text-gray-300 px-1">
