@@ -83,18 +83,22 @@ export default async function DashboardPage({
   const nextPeriodStr = format(nextEnd, 'yyyy-MM-dd')
   const nextStartStr  = format(nextStart, 'yyyy-MM-dd')
 
-  // Período visible: para quincenas pasadas se consulta su registro (solo lectura, no se crea);
-  // para la actual y futuras se usa el período actual (comportamiento de siempre)
+  // Período visible: el de la quincena SELECCIONADA (pasada o futura), no el actual —
+  // mezclar el pagado de una quincena con los pendientes de otra inventa déficits.
+  // Solo lectura: los periodos futuros no se crean hasta que llegan; sin periodo,
+  // pagado = 0 e ingreso cae al vigente.
   let viewPeriod = period
-  if (periodOffset < 0) {
-    const { data: pastPeriod } = await supabase
+  if (periodOffset !== 0) {
+    const { data: otherPeriod } = await supabase
       .from('periods')
       .select('*')
       .eq('owner_id', userId)
       .eq('period_date', nextPeriodStr)
       .single()
-    viewPeriod = pastPeriod
+    viewPeriod = otherPeriod
   }
+  // Los pagos que registres se anclan a la quincena visible; si su periodo no
+  // existe (futura), caen al periodo actual — pagaste hoy, cuenta hoy.
   const activePeriodId = (viewPeriod ?? period)?.id ?? ''
 
   const todayStr = format(new Date(), 'yyyy-MM-dd')
