@@ -2,12 +2,17 @@ export const dynamic = 'force-dynamic'
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
-import { format, subMonths } from 'date-fns'
+import { format, subMonths, addMonths, parseISO } from 'date-fns'
 import type { RecurringExpenseSplit, IncomeConfig } from '@/types/database'
 import { analyzeFinances, monthlyEquivalent } from '@/lib/utils/financial-analysis'
 import CategoryBucketRow from '@/components/analisis/category-bucket-row'
+import RangeSelector from '@/components/analisis/range-selector'
 
-export default async function AnalisisPage() {
+export default async function AnalisisPage({
+  searchParams,
+}: {
+  searchParams: { r?: string }
+}) {
   const supabase = createServerClient()
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) redirect('/login')
@@ -18,7 +23,21 @@ export default async function AnalisisPage() {
   const isLalo = (profile as any)?.display_name?.toLowerCase() === 'lalo'
   const myOwnership = isLalo ? 'lalo' : 'ale'
 
-  const threeMonthsAgo = format(subMonths(new Date(), 3), 'yyyy-MM-dd')
+  // ── Rango seleccionado → lista de meses (yyyy-MM) que cubre ──
+  const range = searchParams.r ?? '3m'
+  const now = new Date()
+  const monthKeys: string[] =
+    range === 'este-mes'   ? [format(now, 'yyyy-MM')]
+    : range === 'mes-pasado' ? [format(subMonths(now, 1), 'yyyy-MM')]
+    : Array.from(
+        { length: range === '6m' ? 6 : range === '12m' ? 12 : 3 },
+        (_, i) => format(subMonths(now, i), 'yyyy-MM'),
+      )
+  const monthsCount = monthKeys.length
+  const monthSet = new Set(monthKeys)
+  // Fechas límite del rango (fin exclusivo = primer día del mes siguiente al más reciente)
+  const windowStart = monthKeys[monthKeys.length - 1] + '-01'
+  const windowEndExcl = format(addMonths(parseISO(monthKeys[0] + '-01'), 1), 'yyyy-MM-dd')
 
   const [
     { data: currentIncome },
@@ -31,9 +50,9 @@ export default async function AnalisisPage() {
     supabase.from('income_config').select('amount').eq('owner_id', userId).order('valid_from', { ascending: false }).limit(1).single() as Promise<{ data: IncomeConfig | null }>,
     supabase.from('recurring_expenses_split').select('*').in('ownership', [myOwnership, 'shared']) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.rpc('get_split_percentages').single() as unknown as Promise<{ data: { lalo_pct: number; ale_pct: number } | null }>,
-    supabase.from('fun_expenses').select('amount, expense_date').gte('expense_date', threeMonthsAgo) as Promise<{ data: { amount: number }[] | null }>,
+    supabase.from('fun_expenses').select('amount, expense_date').gte('expense_date', windowStart).lt('expense_date', windowEndExcl) as Promise<{ data: { amount: number }[] | null }>,
     supabase.from('card_expenses').select('concept, expense_type, months, category, source, card_expense_installments(amount, due_period_date, is_paid)').eq('owner_id', userId).eq('expense_type', 'compra') as Promise<{ data: any[] | null }>,
-    supabase.from('project_payments').select('amount, paid_at').eq('owner_id', userId).gte('paid_at', threeMonthsAgo) as Promise<{ data: { amount: number }[] | null }>,
+    supabase.from('project_payments').select('amount, paid_at').eq('owner_id', userId).gte('paid_at', windowStart).lt('paid_at', windowEndExcl) as Promise<{ data: { amount: number }[] | null }>,
   ])
 
   const monthlyIncome = currentIncome?.amount ?? 0
@@ -51,15 +70,11 @@ export default async function AnalisisPage() {
     }
   })
 
-  // Diversión: promedio mensual real de los últimos 3 meses, mi parte del gasto compartido
+  // Diversión: promedio mensual real del rango, mi parte del gasto compartido
   const funTotal = (funRows ?? []).reduce((s, f) => s + f.amount, 0)
-  const diversionMonthly = Math.round((funTotal / 3) * (myPct / 100) * 100) / 100
+  const diversionMonthly = Math.round((funTotal / monthsCount) * (myPct / 100) * 100) / 100
 
-  // Gasto variable de tarjetas por rubro: promedio de cuotas de los últimos 3 meses
-  // (mes en curso + 2 anteriores), clasificado por la categoría del gasto
-  const monthWindow = new Set(
-    Array.from({ length: 3 }, (_, i) => format(subMonths(new Date(), i), 'yyyy-MM'))
-  )
+  // Gasto de tarjetas en el rango, por categoría (cuotas con vencimiento dentro del rango)
   const variables: { concept: string; monthly: number; category: string }[] = []
   const msiItems: { concept: string; monthly: number }[] = []
   for (const e of cardExpenses ?? []) {
@@ -67,30 +82,23 @@ export default async function AnalisisPage() {
     // como fijos en su categoría — incluirlos aquí los duplicaría
     if (e.source?.startsWith('recurring-')) continue
     const insts = e.card_expense_installments ?? []
-    if (e.months > 1) {
-      // Compras a meses = obligaciones (bloque Ahorro y deudas), no gasto del mes
-      const unpaid = insts.filter((i: any) => !i.is_paid)
-        .sort((a: any, b: any) => (a.due_period_date ?? '9999').localeCompare(b.due_period_date ?? '9999'))
-      if (unpaid.length) msiItems.push({ concept: e.concept, monthly: unpaid[0].amount })
-      continue
-    }
-    // Compras a una exhibición: promedio mensual de los últimos 3 meses, por categoría
     const windowSum = insts
-      .filter((i: any) => monthWindow.has((i.due_period_date ?? '').slice(0, 7)))
+      .filter((i: any) => monthSet.has((i.due_period_date ?? '').slice(0, 7)))
       .reduce((s: number, i: any) => s + i.amount, 0)
-    if (windowSum > 0) {
-      variables.push({
-        concept: e.concept,
-        monthly: Math.round((windowSum / 3) * 100) / 100,
-        category: e.category ?? 'otros',
-      })
+    if (windowSum < 0.01) continue
+    const monthly = Math.round((windowSum / monthsCount) * 100) / 100
+    if (e.months > 1) {
+      // Compras a meses = obligaciones (bloque Ahorro y deudas), no gasto del bloque
+      msiItems.push({ concept: e.concept, monthly })
+    } else {
+      variables.push({ concept: e.concept, monthly, category: e.category ?? 'otros' })
     }
   }
   msiItems.sort((a, b) => b.monthly - a.monthly)
   const msiMonthly = Math.round(msiItems.reduce((s, i) => s + i.monthly, 0) * 100) / 100
 
-  // Ahorro: promedio mensual de abonos a proyectos
-  const ahorroMonthly = Math.round(((projectRows ?? []).reduce((s, p) => s + p.amount, 0) / 3) * 100) / 100
+  // Ahorro: promedio mensual de abonos a proyectos en el rango
+  const ahorroMonthly = Math.round(((projectRows ?? []).reduce((s, p) => s + p.amount, 0) / monthsCount) * 100) / 100
 
   const analysis = analyzeFinances({
     monthlyIncome, fijos, variables, diversionMonthly, ahorroMonthly, msiMonthly, msiItems,
@@ -114,6 +122,9 @@ export default async function AnalisisPage() {
           Tu gasto mensual contra guías de finanzas personales
         </p>
       </div>
+
+      {/* Filtro de rango */}
+      <RangeSelector current={range} />
 
       {/* Hero */}
       <div className="card overflow-hidden">
@@ -211,8 +222,9 @@ export default async function AnalisisPage() {
 
       <p className="text-xs text-gray-300 px-1">
         Regla 50/30/20: Necesidades hasta 50% del ingreso, Deseos hasta 30%, y 20% para
-        ahorro y pago de deudas. Diversión y ahorro usan el promedio real de los últimos
-        3 meses; las compras a meses cuentan como deudas, no como gasto del bloque.
+        ahorro y pago de deudas. Compras, diversión, MSI y ahorro son el promedio mensual
+        del rango seleccionado; los gastos fijos son tus compromisos vigentes y el ingreso
+        es el actual. Las compras a meses cuentan como deudas, no como gasto del bloque.
       </p>
     </div>
   )
