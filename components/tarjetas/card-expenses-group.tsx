@@ -12,6 +12,7 @@ export interface ExpenseRow {
   id: string
   concept: string
   cardId: string | null
+  category?: string
   months: number
   totalAmount: number
   remaining: number
@@ -160,6 +161,7 @@ export default function CardExpensesGroup({
                         interPersonDebtId={e.interPersonDebtId}
                         hasPaidInstallments={e.hasPaidInstallments}
                         nextDue={e.nextInstallment?.due ?? null}
+                        category={e.category}
                       />
                       <DeleteExpenseButton
                         id={e.id}

@@ -19,7 +19,6 @@ export default async function AnalisisPage() {
   const myOwnership = isLalo ? 'lalo' : 'ale'
 
   const threeMonthsAgo = format(subMonths(new Date(), 3), 'yyyy-MM-dd')
-  const currentMonth = format(new Date(), 'yyyy-MM')
 
   const [
     { data: currentIncome },
@@ -33,7 +32,7 @@ export default async function AnalisisPage() {
     supabase.from('recurring_expenses_split').select('*').in('ownership', [myOwnership, 'shared']) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.rpc('get_split_percentages').single() as unknown as Promise<{ data: { lalo_pct: number; ale_pct: number } | null }>,
     supabase.from('fun_expenses').select('amount, expense_date').gte('expense_date', threeMonthsAgo) as Promise<{ data: { amount: number }[] | null }>,
-    supabase.from('card_expenses').select('concept, expense_type, card_expense_installments(amount, due_period_date)').eq('owner_id', userId).eq('expense_type', 'compra') as Promise<{ data: any[] | null }>,
+    supabase.from('card_expenses').select('concept, expense_type, months, category, card_expense_installments(amount, due_period_date, is_paid)').eq('owner_id', userId).eq('expense_type', 'compra') as Promise<{ data: any[] | null }>,
     supabase.from('project_payments').select('amount, paid_at').eq('owner_id', userId).gte('paid_at', threeMonthsAgo) as Promise<{ data: { amount: number }[] | null }>,
   ])
 
@@ -56,22 +55,40 @@ export default async function AnalisisPage() {
   const funTotal = (funRows ?? []).reduce((s, f) => s + f.amount, 0)
   const diversionMonthly = Math.round((funTotal / 3) * (myPct / 100) * 100) / 100
 
-  // Tarjetas: cuotas que caen en el mes en curso
-  const tarjetasItems: { concept: string; monthly: number }[] = []
+  // Gasto variable de tarjetas por rubro: promedio de cuotas de los últimos 3 meses
+  // (mes en curso + 2 anteriores), clasificado por la categoría del gasto
+  const monthWindow = new Set(
+    Array.from({ length: 3 }, (_, i) => format(subMonths(new Date(), i), 'yyyy-MM'))
+  )
+  const variables: { concept: string; monthly: number; category: string }[] = []
+  const msiItems: { concept: string; monthly: number }[] = []
   for (const e of cardExpenses ?? []) {
-    const monthSum = (e.card_expense_installments ?? [])
-      .filter((i: any) => (i.due_period_date ?? '').startsWith(currentMonth))
+    const insts = e.card_expense_installments ?? []
+    const windowSum = insts
+      .filter((i: any) => monthWindow.has((i.due_period_date ?? '').slice(0, 7)))
       .reduce((s: number, i: any) => s + i.amount, 0)
-    if (monthSum > 0) tarjetasItems.push({ concept: e.concept, monthly: Math.round(monthSum * 100) / 100 })
+    if (windowSum > 0) {
+      variables.push({
+        concept: e.concept,
+        monthly: Math.round((windowSum / 3) * 100) / 100,
+        category: e.category ?? 'otros',
+      })
+    }
+    // Carga MSI actual: siguiente cuota pendiente de cada gasto a meses activo
+    if (e.months > 1) {
+      const unpaid = insts.filter((i: any) => !i.is_paid)
+        .sort((a: any, b: any) => (a.due_period_date ?? '9999').localeCompare(b.due_period_date ?? '9999'))
+      if (unpaid.length) msiItems.push({ concept: e.concept, monthly: unpaid[0].amount })
+    }
   }
-  tarjetasItems.sort((a, b) => b.monthly - a.monthly)
-  const tarjetasMonthly = Math.round(tarjetasItems.reduce((s, i) => s + i.monthly, 0) * 100) / 100
+  msiItems.sort((a, b) => b.monthly - a.monthly)
+  const msiMonthly = Math.round(msiItems.reduce((s, i) => s + i.monthly, 0) * 100) / 100
 
   // Ahorro: promedio mensual de abonos a proyectos
   const ahorroMonthly = Math.round(((projectRows ?? []).reduce((s, p) => s + p.amount, 0) / 3) * 100) / 100
 
   const analysis = analyzeFinances({
-    monthlyIncome, fijos, diversionMonthly, tarjetasMonthly, tarjetasItems, ahorroMonthly,
+    monthlyIncome, fijos, variables, diversionMonthly, ahorroMonthly, msiMonthly, msiItems,
   })
 
   const sevStyles: Record<string, string> = {
@@ -115,6 +132,15 @@ export default async function AnalisisPage() {
           </div>
         </div>
       </div>
+
+      {/* Financiamiento (MSI) — indicador transversal */}
+      <section className="card p-4 md:p-5 space-y-1">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="font-semibold text-gray-800 text-sm">Financiamiento (MSI)</h2>
+          <span className="text-xs text-gray-400">carga mensual de compras a meses</span>
+        </div>
+        <CategoryBucketRow bucket={analysis.msi} />
+      </section>
 
       {/* Recomendaciones */}
       {analysis.recommendations.length > 0 && (

@@ -54,7 +54,8 @@ export interface Card {
 
 export type ExpenseCategory =
   | 'vivienda' | 'servicios' | 'alimentacion' | 'transporte'
-  | 'suscripciones' | 'salud' | 'diversion' | 'otros'
+  | 'suscripciones' | 'salud' | 'mascotas' | 'ropa' | 'hogar'
+  | 'diversion' | 'otros'
 
 export interface RecurringExpense {
   id: string
@@ -159,6 +160,7 @@ export interface CardExpense {
   purchase_date: string
   months: number
   expense_type: 'compra' | 'ajuste'
+  category: ExpenseCategory
   is_shared: boolean
   shared_pct: number | null
   inter_person_debt_id: string | null

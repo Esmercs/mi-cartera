@@ -5,6 +5,7 @@ import { Pencil, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { periodEndForDate, paydayForPeriodEnd } from '@/lib/utils/date-utils'
 import { generateInstallments } from '@/lib/utils/installments'
+import { CATEGORY_LABELS } from '@/lib/utils/financial-analysis'
 import { format, addMonths, parseISO } from 'date-fns'
 
 interface Props {
@@ -16,10 +17,11 @@ interface Props {
   interPersonDebtId: string | null
   hasPaidInstallments: boolean
   nextDue: string | null   // due_period_date canónico de la siguiente cuota pendiente
+  category?: string
 }
 
 export default function EditExpenseButton({
-  id, concept, totalAmount, months, cardId, interPersonDebtId, hasPaidInstallments, nextDue,
+  id, concept, totalAmount, months, cardId, interPersonDebtId, hasPaidInstallments, nextDue, category,
 }: Props) {
   const router = useRouter()
   const supabase = createClient()
@@ -35,6 +37,7 @@ export default function EditExpenseButton({
     total_amount: totalAmount.toString(),
     card_id: cardId ?? '',
     next_due: initialDue,
+    category: category ?? 'otros',
   })
 
   async function openModal() {
@@ -52,6 +55,7 @@ export default function EditExpenseButton({
       total_amount: totalAmount.toString(),
       card_id: cardId ?? '',
       next_due: initialDue,
+      category: category ?? 'otros',
     })
     setError(null)
     setOpen(true)
@@ -71,7 +75,7 @@ export default function EditExpenseButton({
     const amountChanged = !hasPaidInstallments && Math.abs(newTotal - totalAmount) >= 0.01
     const dateChanged = form.next_due !== initialDue
 
-    const updates: Record<string, unknown> = { concept: form.concept, card_id: newCardId }
+    const updates: Record<string, unknown> = { concept: form.concept, card_id: newCardId, category: form.category }
     if (amountChanged) updates.total_amount = newTotal
 
     const { data: updated } = await supabase
@@ -137,6 +141,15 @@ export default function EditExpenseButton({
                 <label className="label">Concepto</label>
                 <input className="input" value={form.concept}
                   onChange={e => set('concept', e.target.value)} required />
+              </div>
+              <div>
+                <label className="label">Categoría</label>
+                <select className="input" value={form.category}
+                  onChange={e => set('category', e.target.value)}>
+                  {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="label">

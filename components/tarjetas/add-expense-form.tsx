@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { formatMXN } from '@/lib/utils/currency'
 import { getNextPeriodDates } from '@/lib/utils/date-utils'
 import { generateInstallments } from '@/lib/utils/installments'
+import { CATEGORY_LABELS } from '@/lib/utils/financial-analysis'
 import { format, addMonths } from 'date-fns'
 
 export default function AddExpenseForm() {
@@ -31,6 +32,7 @@ export default function AddExpenseForm() {
     purchase_date: todayStr,
     months: '3',
     first_due: nextPeriodStr,
+    category: 'otros',
   })
 
   async function openModal() {
@@ -65,6 +67,7 @@ export default function AddExpenseForm() {
     setForm({
       concept: '', total_amount: '', card_id: '',
       purchase_date: todayStr, months: '3', first_due: nextPeriodStr,
+      category: 'otros',
     })
     setOpen(true)
   }
@@ -104,6 +107,7 @@ export default function AddExpenseForm() {
         expense_type:  'compra',
         is_shared:     isShared && !!partner,
         shared_pct:    isShared && partner ? partner.pct : null,
+        category:      form.category,
       })
       .select('id')
       .single()
@@ -180,6 +184,15 @@ export default function AddExpenseForm() {
                 <input className="input" value={form.concept}
                   onChange={e => set('concept', e.target.value)}
                   placeholder="Super, Playera, Anualidad..." required />
+              </div>
+              <div>
+                <label className="label">Categoría</label>
+                <select className="input" value={form.category}
+                  onChange={e => set('category', e.target.value)}>
+                  {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

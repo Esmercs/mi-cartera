@@ -73,6 +73,7 @@ export default async function TarjetasPage() {
     return {
       id: e.id,
       concept: e.concept,
+      category: (e as any).category ?? 'otros',
       months: e.months,
       totalAmount: e.total_amount,
       remaining,
