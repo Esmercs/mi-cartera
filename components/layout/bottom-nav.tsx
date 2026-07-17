@@ -6,6 +6,7 @@ import {
   CalendarDays,
   CreditCard,
   PartyPopper,
+  PieChart,
   Target,
 } from 'lucide-react'
 
@@ -14,6 +15,7 @@ const navItems = [
   { href: '/gastos-fijos',   label: 'Gastos',     icon: CalendarDays },
   { href: '/tarjetas',       label: 'Tarjetas',   icon: CreditCard },
   { href: '/diversion',      label: 'Diversión',  icon: PartyPopper },
+  { href: '/analisis',       label: 'Análisis',   icon: PieChart },
   { href: '/proyectos',      label: 'Proyectos',  icon: Target },
 ]
 

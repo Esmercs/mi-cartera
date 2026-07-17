@@ -3,7 +3,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Pencil, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import type { IntervalType, Ownership, PaidBy } from '@/types/database'
+import type { IntervalType, Ownership, PaidBy, ExpenseCategory } from '@/types/database'
+import { CATEGORY_LABELS } from '@/lib/utils/financial-analysis'
 
 const intervals: { value: IntervalType; label: string }[] = [
   { value: 'quincenal',  label: 'Quincenal' },
@@ -28,10 +29,11 @@ interface Props {
   ownership: Ownership
   paidBy?: PaidBy
   nextChargeDate?: string | null
+  category?: ExpenseCategory
 }
 
 export default function EditExpenseButton({
-  id, concept, totalAmount, intervalType, paymentDay, nextPaymentDate, cardId, ownership, paidBy, nextChargeDate,
+  id, concept, totalAmount, intervalType, paymentDay, nextPaymentDate, cardId, ownership, paidBy, nextChargeDate, category,
 }: Props) {
   const router = useRouter()
   const supabase = createClient()
@@ -46,6 +48,7 @@ export default function EditExpenseButton({
     next_payment_date: nextPaymentDate ?? '',
     card_id: cardId ?? '',
     next_charge_date: nextChargeDate ?? '',
+    category: (category ?? 'otros') as ExpenseCategory,
   })
   const [cards, setCards] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(false)
@@ -64,6 +67,7 @@ export default function EditExpenseButton({
       next_payment_date: nextPaymentDate ?? '',
       card_id: cardId ?? '',
       next_charge_date: nextChargeDate ?? '',
+      category: (category ?? 'otros') as ExpenseCategory,
     })
     setError(null)
     const { data } = await supabase.from('cards').select('id, name').eq('is_active', true).order('name')
@@ -98,6 +102,7 @@ export default function EditExpenseButton({
         card_id: form.card_id || null,
         next_charge_date: form.card_id ? (form.next_charge_date || null) : null,
         paid_by: form.ownership === 'shared' ? form.paid_by : 'each',
+        category: form.category,
       })
       .eq('id', id)
     setLoading(false)
@@ -128,6 +133,15 @@ export default function EditExpenseButton({
                 <label className="label">Concepto</label>
                 <input className="input" value={form.concept}
                   onChange={e => set('concept', e.target.value)} required />
+              </div>
+              <div>
+                <label className="label">Categoría</label>
+                <select className="input" value={form.category}
+                  onChange={e => set('category', e.target.value)}>
+                  {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="label">Cantidad total</label>

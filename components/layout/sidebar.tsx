@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   LogOut,
   Target,
+  PieChart,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -26,6 +27,7 @@ const navItems: NavItem[] = [
   { href: '/gastos-fijos', label: 'Gastos',              icon: <CalendarDays size={18} /> },
   { href: '/tarjetas',     label: 'Tarjetas',           icon: <CreditCard size={18} /> },
   { href: '/diversion',    label: 'Diversión',          icon: <PartyPopper size={18} /> },
+  { href: '/analisis',     label: 'Análisis',           icon: <PieChart size={18} /> },
   { href: '/proyectos',    label: 'Proyectos',          icon: <Target size={18} /> },
   { href: '/admin/requests', label: 'Admin',            icon: <ShieldCheck size={18} />, adminOnly: true },
 ]

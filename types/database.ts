@@ -52,6 +52,10 @@ export interface Card {
   created_at: string
 }
 
+export type ExpenseCategory =
+  | 'vivienda' | 'servicios' | 'alimentacion' | 'transporte'
+  | 'suscripciones' | 'salud' | 'diversion' | 'otros'
+
 export interface RecurringExpense {
   id: string
   owner_id: string | null
@@ -63,6 +67,7 @@ export interface RecurringExpense {
   next_payment_date: string | null
   next_charge_date: string | null
   card_id: string | null
+  category: ExpenseCategory
   is_active: boolean
   notes: string | null
   paid_by: PaidBy

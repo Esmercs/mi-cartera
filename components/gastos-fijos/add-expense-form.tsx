@@ -3,7 +3,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import type { Ownership, IntervalType, PaidBy } from '@/types/database'
+import type { Ownership, IntervalType, PaidBy, ExpenseCategory } from '@/types/database'
+import { CATEGORY_LABELS } from '@/lib/utils/financial-analysis'
 
 const intervals: { value: IntervalType; label: string }[] = [
   { value: 'quincenal',   label: 'Quincenal' },
@@ -31,6 +32,7 @@ export default function AddExpenseForm() {
     next_payment_date: '',
     card_id: '',
     next_charge_date: '',
+    category: 'otros' as ExpenseCategory,
   })
   const [cards, setCards] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(false)
@@ -68,6 +70,7 @@ export default function AddExpenseForm() {
       card_id: form.card_id || null,
       next_charge_date: form.card_id ? (form.next_charge_date || null) : null,
       paid_by: form.ownership === 'shared' ? form.paid_by : 'each',
+      category: form.category,
     })
 
     setOpen(false)
@@ -78,7 +81,7 @@ export default function AddExpenseForm() {
   return (
     <>
       <button onClick={async () => {
-        setForm({ concept: '', total_amount: '', ownership: 'shared', paid_by: 'each', interval_type: 'mensual', payment_day: '15', next_payment_date: '', card_id: '', next_charge_date: '' })
+        setForm({ concept: '', total_amount: '', ownership: 'shared', paid_by: 'each', interval_type: 'mensual', payment_day: '15', next_payment_date: '', card_id: '', next_charge_date: '', category: 'otros' })
         const { data } = await supabase.from('cards').select('id, name').eq('is_active', true).order('name')
         setCards(data ?? [])
         setOpen(true)
@@ -96,6 +99,15 @@ export default function AddExpenseForm() {
                 <input className="input" value={form.concept}
                   onChange={e => set('concept', e.target.value)}
                   placeholder="Netflix, Renta, etc." required />
+              </div>
+              <div>
+                <label className="label">Categoría</label>
+                <select className="input" value={form.category}
+                  onChange={e => set('category', e.target.value)}>
+                  {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="label">Cantidad total</label>
