@@ -67,6 +67,14 @@ export default async function AnalisisPage() {
     // como fijos en su categoría — incluirlos aquí los duplicaría
     if (e.source?.startsWith('recurring-')) continue
     const insts = e.card_expense_installments ?? []
+    if (e.months > 1) {
+      // Compras a meses = obligaciones (bloque Ahorro y deudas), no gasto del mes
+      const unpaid = insts.filter((i: any) => !i.is_paid)
+        .sort((a: any, b: any) => (a.due_period_date ?? '9999').localeCompare(b.due_period_date ?? '9999'))
+      if (unpaid.length) msiItems.push({ concept: e.concept, monthly: unpaid[0].amount })
+      continue
+    }
+    // Compras a una exhibición: promedio mensual de los últimos 3 meses, por categoría
     const windowSum = insts
       .filter((i: any) => monthWindow.has((i.due_period_date ?? '').slice(0, 7)))
       .reduce((s: number, i: any) => s + i.amount, 0)
@@ -76,12 +84,6 @@ export default async function AnalisisPage() {
         monthly: Math.round((windowSum / 3) * 100) / 100,
         category: e.category ?? 'otros',
       })
-    }
-    // Carga MSI actual: siguiente cuota pendiente de cada gasto a meses activo
-    if (e.months > 1) {
-      const unpaid = insts.filter((i: any) => !i.is_paid)
-        .sort((a: any, b: any) => (a.due_period_date ?? '9999').localeCompare(b.due_period_date ?? '9999'))
-      if (unpaid.length) msiItems.push({ concept: e.concept, monthly: unpaid[0].amount })
     }
   }
   msiItems.sort((a, b) => b.monthly - a.monthly)
@@ -136,19 +138,6 @@ export default async function AnalisisPage() {
         </div>
       </div>
 
-      {/* Financiamiento (MSI) — indicador transversal */}
-      <section className="card p-4 md:p-5 space-y-1">
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="font-semibold text-gray-800 text-sm">Financiamiento (MSI)</h2>
-          <span className="text-xs text-gray-400">carga mensual de compras a meses</span>
-        </div>
-        <CategoryBucketRow bucket={analysis.msi} />
-        <p className="text-[10px] text-gray-300">
-          Estas cuotas ya están repartidas en las categorías de abajo — este indicador
-          mide cómo pagas, no en qué gastas; no se suma al total.
-        </p>
-      </section>
-
       {/* Recomendaciones */}
       {analysis.recommendations.length > 0 && (
         <section className="space-y-2">
@@ -168,29 +157,49 @@ export default async function AnalisisPage() {
         </div>
       )}
 
-      {/* Semáforo por categoría */}
-      <section className="card p-4 md:p-5 space-y-1">
-        <h2 className="font-semibold text-gray-800 text-sm mb-2">Tu distribución vs recomendado</h2>
-        {analysis.buckets.map(b => (
-          <CategoryBucketRow key={b.key} bucket={b} />
-        ))}
-        {analysis.otros && <CategoryBucketRow bucket={analysis.otros} informational />}
-        {/* Total verificable: gasto comprometido + ahorro */}
-        <div className="flex items-center justify-between pt-2 text-sm font-bold text-gray-700">
-          <span>Total (gasto + ahorro)</span>
-          <span>
-            {(analysis.committedPct + (monthlyIncome > 0 ? (ahorroMonthly / monthlyIncome) * 100 : 0)).toFixed(1)}%
-            <span className="text-gray-400 font-medium ml-2">
-              {formatMXN(analysis.committedMonthly + ahorroMonthly)}/mes
-            </span>
+      {/* Regla 50/30/20: tres bloques */}
+      {analysis.groups.map(g => {
+        const groupColor = g.status === 'ok' ? 'bg-green-500' : g.status === 'warn' ? 'bg-amber-400' : 'bg-red-500'
+        const groupText  = g.status === 'ok' ? 'text-green-600' : g.status === 'warn' ? 'text-amber-600' : 'text-red-600'
+        return (
+          <section key={g.key} className="card p-4 md:p-5 space-y-1">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-gray-800 text-sm">{g.label}</h2>
+              <span className="text-xs">
+                <span className={`font-bold ${groupText}`}>{g.pct.toFixed(1)}%</span>
+                <span className="text-gray-400"> / {g.key === 'ahorro_deudas' ? '' : 'máx '}{g.cap}%</span>
+                <span className="text-gray-500 font-medium ml-2">{formatMXN(g.monthly)}/mes</span>
+              </span>
+            </div>
+            <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden relative">
+              <div className={`h-full rounded-full ${groupColor}`} style={{ width: `${Math.min(g.pct, 100)}%` }} />
+              <div className="absolute top-0 bottom-0 w-0.5 bg-gray-400/60" style={{ left: `${g.cap}%` }} />
+            </div>
+            <p className="text-[10px] text-gray-300 pb-1">{g.why}</p>
+            {g.rows.length === 0 ? (
+              <p className="text-xs text-gray-400">Sin movimientos en este bloque.</p>
+            ) : (
+              g.rows.map(row => <CategoryBucketRow key={row.key} bucket={row} informational />)
+            )}
+          </section>
+        )
+      })}
+
+      {/* Total verificable */}
+      <div className="card p-4 flex items-center justify-between text-sm font-bold text-gray-700">
+        <span>Total (los 3 bloques)</span>
+        <span>
+          {analysis.groups.reduce((s, g) => s + g.pct, 0).toFixed(1)}%
+          <span className="text-gray-400 font-medium ml-2">
+            {formatMXN(analysis.groups.reduce((s, g) => s + g.monthly, 0))}/mes de {formatMXN(monthlyIncome)}
           </span>
-        </div>
-      </section>
+        </span>
+      </div>
 
       <p className="text-xs text-gray-300 px-1">
-        Los topes forman un presupuesto completo: suman exactamente 100% de tu ingreso
-        (90% de gasto + 10% de ahorro). Son guías generales — ajústalas a tu realidad.
-        Diversión y ahorro usan el promedio real de los últimos 3 meses.
+        Regla 50/30/20: Necesidades hasta 50% del ingreso, Deseos hasta 30%, y 20% para
+        ahorro y pago de deudas. Diversión y ahorro usan el promedio real de los últimos
+        3 meses; las compras a meses cuentan como deudas, no como gasto del bloque.
       </p>
     </div>
   )

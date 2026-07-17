@@ -30,75 +30,38 @@ export function monthlyEquivalent(amount: number, interval: IntervalType): numbe
   }
 }
 
-// ── Benchmarks (guías generales de finanzas personales, % del ingreso mensual) ──
+// ── Regla 50/30/20: tres bloques que suman exactamente 100% del ingreso ─────
 
-export interface Benchmark {
-  key: string
+export interface GroupConfig {
+  key: 'necesidades' | 'deseos' | 'ahorro_deudas'
   label: string
-  cap: number          // % máximo recomendado (o mínimo si floor)
-  floor?: boolean      // true = es un piso (ahorro), no un techo
-  categories: string[] // categorías de gastos fijos que agrupa ('' = bucket derivado)
+  cap: number
+  categories: ExpenseCategory[]
   why: string
 }
 
-// Los topes forman un presupuesto COMPLETO: suman exactamente 100% del ingreso
-// (90% de gasto + 10% de ahorro). Si respetas todos, el mes cierra en ceros
-// con tu ahorro incluido.
-export const BENCHMARKS: Benchmark[] = [
+export const GROUPS: GroupConfig[] = [
   {
-    key: 'vivienda_servicios', label: 'Vivienda y servicios', cap: 30,
-    categories: ['vivienda', 'servicios'],
-    why: 'Renta, luz, agua, gas e internet no deberían rebasar el 30% del ingreso; arriba de eso el resto del presupuesto se asfixia.',
+    key: 'necesidades', label: 'Necesidades', cap: 50,
+    categories: ['vivienda', 'servicios', 'alimentacion', 'transporte', 'salud', 'mascotas', 'hogar'],
+    why: 'Gastos obligatorios para vivir: vivienda, servicios, despensa, transporte, salud y los seres a tu cargo.',
   },
   {
-    key: 'alimentacion', label: 'Alimentación', cap: 15,
-    categories: ['alimentacion'],
-    why: 'La despensa y comida del hogar suele mantenerse sana hasta el 15% del ingreso.',
+    key: 'deseos', label: 'Deseos', cap: 30,
+    categories: ['suscripciones', 'ropa', 'diversion', 'otros'],
+    why: 'Estilo de vida: salidas, streaming, ropa y pasatiempos. Es lo primero recortable en una emergencia.',
   },
   {
-    key: 'transporte', label: 'Transporte', cap: 15,
-    categories: ['transporte'],
-    why: 'Auto, gasolina y seguro; más del 15% indica un auto caro para el ingreso actual.',
-  },
-  {
-    key: 'suscripciones', label: 'Suscripciones', cap: 4,
-    categories: ['suscripciones'],
-    why: 'Streaming y servicios digitales son el gasto hormiga clásico: 4% es un tope generoso.',
-  },
-  {
-    key: 'salud', label: 'Salud', cap: 5,
-    categories: ['salud'],
-    why: 'Seguros y gastos médicos recurrentes como prevención.',
-  },
-  {
-    key: 'mascotas', label: 'Mascotas', cap: 3,
-    categories: ['mascotas'],
-    why: 'Croquetas, veterinario y accesorios; arriba del 3% conviene un fondo dedicado para absorber los picos.',
-  },
-  {
-    key: 'ropa', label: 'Ropa', cap: 5,
-    categories: ['ropa'],
-    why: 'Ropa y calzado se recomienda mantenerlos alrededor del 5% del ingreso.',
-  },
-  {
-    key: 'hogar', label: 'Hogar', cap: 3,
-    categories: ['hogar'],
-    why: 'Artículos de limpieza y mantenimiento de la casa.',
-  },
-  {
-    key: 'diversion', label: 'Diversión', cap: 10,
-    categories: ['diversion'],
-    why: 'El ocio es necesario, pero se recomienda contenerlo en 10% del ingreso.',
-  },
-  {
-    key: 'ahorro', label: 'Ahorro y proyectos', cap: 10, floor: true,
+    key: 'ahorro_deudas', label: 'Ahorro y deudas', cap: 20,
     categories: [],
-    why: 'Destinar al menos 10% del ingreso a ahorro o metas te da colchón ante imprevistos.',
+    why: 'Pagarte a ti primero y reducir lo que debes: fondo de emergencia, metas y pagos a crédito (MSI).',
   },
 ]
 
-// Tope específico de financiamiento: carga mensual de MSI sobre el ingreso
+// Dentro del 20%: si solo los MSI ya rebasan esto, estás sobre-financiado
 export const MSI_CAP = 15
+// Piso de ahorro deseable dentro del bloque del 20%
+export const AHORRO_FLOOR = 10
 
 // ── Motor de análisis ────────────────────────────────────────────────────────
 
@@ -108,11 +71,11 @@ export interface AnalysisInput {
   monthlyIncome: number
   // Gastos fijos mensualizados (mi parte), con su categoría
   fijos: { concept: string; monthly: number; category: string }[]
-  // Gastos de tarjeta: promedio mensual de cuotas (últimos 3 meses), con su categoría
+  // Compras de tarjeta a UNA exhibición: promedio mensual de cuotas (últimos 3 meses)
   variables: { concept: string; monthly: number; category: string }[]
-  diversionMonthly: number     // promedio mensual real (mi parte)
+  diversionMonthly: number     // promedio mensual real del módulo (mi parte)
   ahorroMonthly: number        // promedio mensual de abonos a proyectos
-  // Financiamiento: carga mensual actual de gastos a meses (MSI)
+  // Obligaciones: carga mensual actual de compras a meses (MSI)
   msiMonthly: number
   msiItems: AnalysisItem[]
 }
@@ -131,6 +94,17 @@ export interface BucketResult {
   items: AnalysisItem[]
 }
 
+export interface GroupResult {
+  key: string
+  label: string
+  cap: number
+  monthly: number
+  pct: number
+  status: BucketStatus
+  why: string
+  rows: BucketResult[]   // desglose por categoría (informativo, sin tope propio)
+}
+
 export interface Recommendation {
   severity: 'over' | 'warn' | 'info'
   title: string
@@ -138,11 +112,9 @@ export interface Recommendation {
 }
 
 export interface AnalysisResult {
-  buckets: BucketResult[]      // en el orden de BENCHMARKS + "Otros" al final
-  otros: BucketResult | null   // sin benchmark, informativo
-  msi: BucketResult            // indicador transversal: sus cuotas ya viven en las categorías
+  groups: GroupResult[]
   recommendations: Recommendation[]
-  committedMonthly: number     // todo excepto ahorro
+  committedMonthly: number     // necesidades + deseos + MSI
   committedPct: number
   freeMonthly: number
 }
@@ -152,108 +124,104 @@ const r2 = (n: number) => Math.round(n * 100) / 100
 export function analyzeFinances(input: AnalysisInput): AnalysisResult {
   const income = input.monthlyIncome
   const pctOf = (n: number) => (income > 0 ? (n / income) * 100 : 0)
+  const capStatus = (pct: number, cap: number): BucketStatus =>
+    pct <= cap ? 'ok' : pct <= cap * 1.15 ? 'warn' : 'over'
 
-  const buckets: BucketResult[] = []
-  let otros: BucketResult | null = null
-
-  // Fijos + gasto variable de tarjetas, ambos con categoría
   const allSpend = [...input.fijos, ...input.variables]
 
-  for (const b of BENCHMARKS) {
-    let items: AnalysisItem[] = []
-    let monthly = 0
+  const infoRow = (key: string, label: string, monthly: number, items: AnalysisItem[], why = ''): BucketResult => ({
+    key, label, monthly: r2(monthly), pct: pctOf(monthly), cap: 0,
+    floor: false, status: 'ok', why, items,
+  })
 
-    if (b.key === 'ahorro') {
-      monthly = input.ahorroMonthly
-      items = monthly > 0 ? [{ concept: 'Abonos a proyectos (prom. 3 meses)', monthly }] : []
-    } else if (b.key === 'diversion') {
-      // El fijo "Diversión" es el APORTE al presupuesto y fun_expenses es el gasto
-      // real de ese mismo dinero — contar ambos duplica. Se toma el mayor de los dos.
-      const tagged = allSpend.filter(f => f.category === 'diversion')
-      const aporte = tagged.reduce((s, f) => s + f.monthly, 0)
-      monthly = Math.max(input.diversionMonthly, aporte)
-      items = [
-        ...(input.diversionMonthly > 0 ? [{ concept: 'Gasto real del módulo (prom. 3 meses, tu parte)', monthly: input.diversionMonthly }] : []),
-        ...tagged.map(f => ({ concept: `${f.concept} (aporte al presupuesto)`, monthly: f.monthly })),
+  const groups: GroupResult[] = GROUPS.map(g => {
+    let rows: BucketResult[] = []
+
+    if (g.key === 'ahorro_deudas') {
+      rows = [
+        infoRow('msi', 'Pagos a MSI (deudas)', input.msiMonthly, input.msiItems,
+          'Carga mensual de tus compras a meses.'),
+        infoRow('ahorro', 'Ahorro y proyectos', input.ahorroMonthly,
+          input.ahorroMonthly > 0 ? [{ concept: 'Abonos a proyectos (prom. 3 meses)', monthly: input.ahorroMonthly }] : [],
+          'Promedio mensual de tus abonos a metas.'),
       ]
     } else {
-      const mine = allSpend.filter(f => b.categories.includes(f.category))
-      items = mine.map(f => ({ concept: f.concept, monthly: f.monthly })).sort((a, c) => c.monthly - a.monthly)
-      monthly = mine.reduce((s, f) => s + f.monthly, 0)
-    }
-
-    monthly = r2(monthly)
-    const pct = pctOf(monthly)
-    let status: BucketStatus
-    if (b.floor) {
-      status = pct >= b.cap ? 'ok' : pct >= b.cap / 2 ? 'warn' : 'over'
-    } else {
-      status = pct <= b.cap ? 'ok' : pct <= b.cap * 1.15 ? 'warn' : 'over'
-    }
-
-    buckets.push({
-      key: b.key, label: b.label, monthly, pct, cap: b.cap,
-      floor: !!b.floor, status, why: b.why, items,
-    })
-  }
-
-  // "Otros": sin benchmark, solo informativo
-  const otrosSpend = allSpend.filter(f =>
-    !BENCHMARKS.some(b => b.categories.includes(f.category)) && f.category !== 'diversion')
-  if (otrosSpend.length) {
-    const monthly = r2(otrosSpend.reduce((s, f) => s + f.monthly, 0))
-    otros = {
-      key: 'otros', label: 'Otros', monthly, pct: pctOf(monthly), cap: 0,
-      floor: false, status: 'ok', why: 'Sin categoría asignada — clasifícalos en Gastos o Tarjetas para un análisis más fino.',
-      items: otrosSpend.map(f => ({ concept: f.concept, monthly: f.monthly })).sort((a, c) => c.monthly - a.monthly),
-    }
-  }
-
-  // Indicador transversal de financiamiento (MSI): sus cuotas ya están dentro
-  // de las categorías, aquí se mide la carga total de compras a meses
-  const msiPct = pctOf(input.msiMonthly)
-  const msi: BucketResult = {
-    key: 'msi', label: 'Financiamiento (MSI)',
-    monthly: r2(input.msiMonthly), pct: msiPct, cap: MSI_CAP, floor: false,
-    status: msiPct <= MSI_CAP ? 'ok' : msiPct <= MSI_CAP * 1.15 ? 'warn' : 'over',
-    why: 'Carga mensual de todas tus compras a meses. Arriba del 15% del ingreso, cada quincena nueva nace comprometida.',
-    items: input.msiItems,
-  }
-
-  // Recomendaciones, la más grave primero
-  const recommendations: Recommendation[] = []
-  for (const bk of buckets) {
-    if (bk.floor) {
-      if (bk.status !== 'ok') {
-        recommendations.push({
-          severity: bk.status === 'over' ? 'over' : 'warn',
-          title: `Ahorro por debajo del mínimo recomendado`,
-          detail: `Se recomienda destinar al menos ${bk.cap}% de tu ingreso (${fmtPct(bk.cap, income)}) a ahorro o metas. Hoy destinas ${bk.pct.toFixed(1)}%. Considera apartar un monto fijo cada quincena hacia Proyectos.`,
-        })
+      for (const cat of g.categories) {
+        if (cat === 'diversion') {
+          // El fijo "Diversión" es el APORTE al presupuesto y el módulo registra el
+          // gasto real de ese mismo dinero — se toma el mayor, no la suma
+          const tagged = allSpend.filter(f => f.category === 'diversion')
+          const aporte = tagged.reduce((s, f) => s + f.monthly, 0)
+          const monthly = Math.max(input.diversionMonthly, aporte)
+          if (monthly < 0.01) continue
+          rows.push(infoRow(cat, CATEGORY_LABELS[cat], monthly, [
+            ...(input.diversionMonthly > 0 ? [{ concept: 'Gasto real del módulo (prom. 3 meses, tu parte)', monthly: input.diversionMonthly }] : []),
+            ...tagged.map(f => ({ concept: `${f.concept} (aporte al presupuesto)`, monthly: f.monthly })),
+          ]))
+          continue
+        }
+        const mine = allSpend.filter(f => f.category === cat)
+        if (!mine.length) continue
+        rows.push(infoRow(cat, CATEGORY_LABELS[cat],
+          mine.reduce((s, f) => s + f.monthly, 0),
+          mine.map(f => ({ concept: f.concept, monthly: f.monthly })).sort((a, b) => b.monthly - a.monthly)))
       }
-      continue
+      rows.sort((a, b) => b.monthly - a.monthly)
     }
-    if (bk.status === 'ok' || bk.monthly === 0) continue
-    const top = bk.items.slice(0, 3).map(i => `${i.concept} (${fmtMoney(i.monthly)}/mes)`).join(', ')
+
+    const monthly = r2(rows.reduce((s, r) => s + r.monthly, 0))
+    const pct = pctOf(monthly)
+    return {
+      key: g.key, label: g.label, cap: g.cap, monthly, pct,
+      status: capStatus(pct, g.cap), why: g.why, rows,
+    }
+  })
+
+  // ── Recomendaciones, la más grave primero ──
+  const recommendations: Recommendation[] = []
+  const [nec, des, ahd] = groups
+
+  for (const g of [nec, des]) {
+    if (g.status === 'ok' || g.monthly === 0) continue
+    const top = g.rows.flatMap(r => r.items).sort((a, b) => b.monthly - a.monthly).slice(0, 3)
+      .map(i => `${i.concept} (${fmtMoney(i.monthly)}/mes)`).join(', ')
     recommendations.push({
-      severity: bk.status,
-      title: `${bk.label}: ${bk.pct.toFixed(1)}% — recomendado máx ${bk.cap}%`,
-      detail: `Estás gastando ${fmtMoney(bk.monthly)}/mes; el tope sugerido para tu ingreso es ${fmtPct(bk.cap, income)}. ${top ? `Candidatos a revisar: ${top}.` : ''}`,
+      severity: g.status,
+      title: `${g.label}: ${g.pct.toFixed(1)}% — recomendado máx ${g.cap}%`,
+      detail: `Estás gastando ${fmtMoney(g.monthly)}/mes; el tope sugerido es ${fmtMoney((g.cap / 100) * income)}. Candidatos a revisar: ${top}.`,
     })
   }
 
-  // MSI sobregirado → recomendación específica de financiamiento
-  if (msi.status !== 'ok') {
-    const top = msi.items.slice(0, 3).map(i => `${i.concept} (${fmtMoney(i.monthly)}/mes)`).join(', ')
+  const msiPct = pctOf(input.msiMonthly)
+  if (ahd.status !== 'ok') {
     recommendations.push({
-      severity: msi.status,
-      title: `Financiamiento: pagas ${fmtMoney(msi.monthly)}/mes a MSI (${msi.pct.toFixed(1)}%) — recomendado máx ${MSI_CAP}%`,
-      detail: `Estás sobregastando en compras a meses. Evita contratar nuevos MSI hasta liquidar los actuales${top ? `: ${top}` : ''}.`,
+      severity: ahd.status,
+      title: `Ahorro y deudas: ${ahd.pct.toFixed(1)}% — recomendado máx ${ahd.cap}%`,
+      detail: msiPct > AHORRO_FLOOR
+        ? `El bloque se excede y son sobre todo deudas (MSI: ${fmtMoney(input.msiMonthly)}/mes). Evita nuevos MSI hasta liquidar los actuales.`
+        : `El bloque del 20% está excedido. Revisa el balance entre abonos a deudas y ahorro.`,
+    })
+  }
+  if (msiPct > MSI_CAP) {
+    const top = input.msiItems.slice(0, 3).map(i => `${i.concept} (${fmtMoney(i.monthly)}/mes)`).join(', ')
+    recommendations.push({
+      severity: msiPct > MSI_CAP * 1.15 ? 'over' : 'warn',
+      title: `Sobre-financiamiento: pagas ${fmtMoney(input.msiMonthly)}/mes a MSI (${msiPct.toFixed(1)}%)`,
+      detail: `Solo tus compras a meses ya rebasan el ${MSI_CAP}% del ingreso — casi todo tu bloque de ahorro y deudas. No contrates nuevos MSI hasta liquidar${top ? `: ${top}` : ''}.`,
     })
   }
 
-  // Rubro mascotas recurrente y alto → fondo dedicado
-  const mascotas = buckets.find(b => b.key === 'mascotas')
+  const ahorroPct = pctOf(input.ahorroMonthly)
+  if (income > 0 && ahorroPct < AHORRO_FLOOR) {
+    recommendations.push({
+      severity: ahorroPct < AHORRO_FLOOR / 2 ? 'over' : 'warn',
+      title: 'Ahorro por debajo del mínimo recomendado',
+      detail: `Del bloque de 20% para ahorro y deudas, se recomienda que al menos ${AHORRO_FLOOR}% del ingreso (${fmtMoney((AHORRO_FLOOR / 100) * income)}) sea ahorro. Hoy ahorras ${ahorroPct.toFixed(1)}%. Considera apartar un monto fijo cada quincena hacia Proyectos.`,
+    })
+  }
+
+  // Mascotas recurrente y alto → fondo dedicado
+  const mascotas = nec.rows.find(r => r.key === 'mascotas')
   if (mascotas && income > 0 && mascotas.pct >= 1.5) {
     recommendations.push({
       severity: 'info',
@@ -262,16 +230,13 @@ export function analyzeFinances(input: AnalysisInput): AnalysisResult {
     })
   }
 
-  const committedMonthly = r2(
-    buckets.filter(b => b.key !== 'ahorro').reduce((s, b) => s + b.monthly, 0)
-    + (otros?.monthly ?? 0)
-  )
+  const committedMonthly = r2(nec.monthly + des.monthly + input.msiMonthly)
   const committedPct = pctOf(committedMonthly)
   if (committedPct > 90) {
     recommendations.push({
       severity: 'over',
       title: `Tu gasto comprometido es ${committedPct.toFixed(0)}% del ingreso`,
-      detail: `Queda muy poco margen para imprevistos (${fmtMoney(income - committedMonthly)}/mes libre). Prioriza recortar las categorías en rojo antes de asumir nuevos pagos fijos o MSI.`,
+      detail: `Queda muy poco margen para imprevistos (${fmtMoney(income - committedMonthly)}/mes libre). Prioriza recortar los bloques en rojo antes de asumir nuevos pagos fijos o MSI.`,
     })
   }
 
@@ -279,7 +244,7 @@ export function analyzeFinances(input: AnalysisInput): AnalysisResult {
   recommendations.sort((a, b) => sevOrder[a.severity] - sevOrder[b.severity])
 
   return {
-    buckets, otros, msi, recommendations,
+    groups, recommendations,
     committedMonthly, committedPct,
     freeMonthly: r2(income - committedMonthly),
   }
@@ -287,7 +252,4 @@ export function analyzeFinances(input: AnalysisInput): AnalysisResult {
 
 function fmtMoney(n: number): string {
   return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n)
-}
-function fmtPct(cap: number, income: number): string {
-  return fmtMoney((cap / 100) * income)
 }
