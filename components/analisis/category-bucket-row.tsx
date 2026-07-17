@@ -19,10 +19,10 @@ export default function CategoryBucketRow({
 }) {
   const [open, setOpen] = useState(false)
   const colors = STATUS_COLORS[bucket.status]
-  // Escala de la barra: el tope recomendado marca el 80% del ancho
-  const widthPct = informational || bucket.cap === 0
-    ? Math.min(bucket.pct, 100)
-    : Math.min((bucket.pct / bucket.cap) * 80, 100)
+  // Todas las barras comparten la misma escala: % del ingreso mensual.
+  // Así se pueden "sumar" visualmente y cuadran con la fila de Total.
+  const widthPct = Math.min(bucket.pct, 100)
+  const capMark = !informational && bucket.cap > 0 ? Math.min(bucket.cap, 100) : null
 
   return (
     <div className="py-2 border-b last:border-0">
@@ -51,9 +51,9 @@ export default function CategoryBucketRow({
             className={`h-full rounded-full ${colors.bar}`}
             style={{ width: `${widthPct}%` }}
           />
-          {!informational && bucket.cap > 0 && (
-            // Marca del tope/piso recomendado (80% del ancho de la barra)
-            <div className="absolute top-0 bottom-0 w-0.5 bg-gray-400/60" style={{ left: '80%' }} />
+          {capMark !== null && (
+            // Tope/piso recomendado, en la misma escala (% del ingreso)
+            <div className="absolute top-0 bottom-0 w-0.5 bg-gray-400/60" style={{ left: `${capMark}%` }} />
           )}
         </div>
       </button>
