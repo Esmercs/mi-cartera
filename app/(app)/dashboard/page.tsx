@@ -119,7 +119,10 @@ export default async function DashboardPage({
     { data: nextDebts },
     { data: allProjections },
   ] = await Promise.all([
-    supabase.from('period_payments').select('*, cards(name)').eq('period_id', viewPeriod?.id ?? '').order('paid_at', { ascending: false }),
+    // Leer los pagos del MISMO periodo donde se anclan las escrituras (activePeriodId):
+    // si la quincena vista es futura y su periodo no existe, los pagos caen al actual.
+    // Usar viewPeriod?.id ?? '' aquí dejaba el filtro en '' y ocultaba pagos recién hechos.
+    supabase.from('period_payments').select('*, cards(name)').eq('period_id', activePeriodId).order('paid_at', { ascending: false }),
     // Resumen mensual (RLS acota period_payments a mis periodos)
     supabase.from('period_payments').select('amount, paid_at').gte('paid_at', sixMonthsAgoStr) as Promise<{ data: { amount: number; paid_at: string }[] | null }>,
     supabase.from('fun_expenses').select('amount, expense_date').gte('expense_date', sixMonthsAgoStr) as Promise<{ data: { amount: number; expense_date: string }[] | null }>,
