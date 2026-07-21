@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { formatMXN } from '@/lib/utils/currency'
 import { nextPaymentDate } from '@/lib/utils/date-utils'
 import { payInstallment } from '@/lib/utils/pay-installment'
+import { settleRecurringCardCharge } from '@/lib/utils/settle-recurring-card-charge'
 import type { IntervalType } from '@/types/database'
 
 interface Props {
@@ -38,8 +39,26 @@ export default function RegisterNextPaymentButton({
 
   async function handlePay(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
     const paid = parseFloat(paidAmount)
+
+    // Guardia anti-duplicados: si ya hay un pago para este concepto+tarjeta en la
+    // quincena, confirmar antes de registrar otro (evita filas repetidas).
+    const dupQuery = supabase
+      .from('period_payments')
+      .select('id')
+      .eq('period_id', periodId)
+      .eq('concept', concept)
+    const { data: dupes } = await (cardId
+      ? dupQuery.eq('card_id', cardId)
+      : dupQuery.is('card_id', null)
+    ).limit(1)
+    if (dupes && dupes.length > 0) {
+      if (!window.confirm(`Ya hay un pago registrado para «${concept}» en esta quincena. ¿Registrar otro?`)) {
+        return
+      }
+    }
+
+    setLoading(true)
 
     await supabase.from('period_payments').insert({
       period_id:      periodId,
@@ -56,6 +75,11 @@ export default function RegisterNextPaymentButton({
     if ((type === 'msi' || type === 'programado') && installmentId) {
       const ok = await payInstallment(supabase, installmentId, paid)
       if (!ok) alert('No se pudo marcar la cuota como pagada (bloqueado por permisos).')
+    }
+
+    // Fijo domiciliado a tarjeta: reflejar el pago en el ledger para bajar la deuda
+    if (type === 'fijo' && cardId && recurringExpenseId) {
+      await settleRecurringCardCharge(supabase, recurringExpenseId, paid)
     }
 
     // For date-based recurring expenses: advance next_payment_date by the interval

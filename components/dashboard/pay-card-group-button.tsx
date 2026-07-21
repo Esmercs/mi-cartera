@@ -5,6 +5,7 @@ import { CreditCard, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatMXN } from '@/lib/utils/currency'
 import { payInstallment } from '@/lib/utils/pay-installment'
+import { settleRecurringCardCharge } from '@/lib/utils/settle-recurring-card-charge'
 
 interface Item {
   concept: string
@@ -12,6 +13,7 @@ interface Item {
   cardId: string | null
   type: 'fijo' | 'msi' | 'programado' | 'deuda'
   installmentId: string | null
+  recurringExpenseId?: string | null
 }
 
 interface Props {
@@ -35,9 +37,28 @@ export default function PayCardGroupButton({ periodId, cardName, items, totalAmo
 
   async function handlePay(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
     const paid = parseFloat(paidAmount)
     const isPartial = paid < totalAmount
+
+    // Guardia anti-duplicados: si algún concepto de esta tarjeta ya tiene pago
+    // en la quincena, confirmar antes de registrar de nuevo.
+    const cid = items[0]?.cardId ?? null
+    const dupQuery = supabase
+      .from('period_payments')
+      .select('id')
+      .eq('period_id', periodId)
+      .in('concept', items.map(i => i.concept))
+    const { data: dupes } = await (cid
+      ? dupQuery.eq('card_id', cid)
+      : dupQuery.is('card_id', null)
+    ).limit(1)
+    if (dupes && dupes.length > 0) {
+      if (!window.confirm(`Ya hay pagos registrados para ${cardName} en esta quincena. ¿Registrar de nuevo?`)) {
+        return
+      }
+    }
+
+    setLoading(true)
 
     if (isPartial) {
       // Pago parcial itemizado: primero las cuotas de tarjeta (la última que no
@@ -70,6 +91,10 @@ export default function PayCardGroupButton({ periodId, cardName, items, totalAmo
           payment_type: 'fijo',
           paid_at:      new Date().toISOString(),
         })
+        // Fijo domiciliado a tarjeta: bajar la deuda del ledger
+        if (item.type === 'fijo' && item.cardId && item.recurringExpenseId) {
+          await settleRecurringCardCharge(supabase, item.recurringExpenseId, pay)
+        }
         remaining = Math.round((remaining - pay) * 100) / 100
       }
       if (remaining >= 0.01) {
@@ -96,6 +121,9 @@ export default function PayCardGroupButton({ periodId, cardName, items, totalAmo
         })
         if (item.installmentId) {
           await payInstallment(supabase, item.installmentId, item.amount)
+        } else if (item.type === 'fijo' && item.cardId && item.recurringExpenseId) {
+          // Fijo domiciliado a tarjeta: bajar la deuda del ledger
+          await settleRecurringCardCharge(supabase, item.recurringExpenseId, item.amount)
         }
       }
     }

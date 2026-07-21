@@ -262,7 +262,10 @@ export default async function DashboardPage({
         cardId: e.card_id ?? null, installmentId: null,
         debtId: null, creditorName: null,
         totalInstallments: null, paidInstallments: 0, dueDate: null,
-        recurringExpenseId: isDateBased ? e.id : null,
+        // Siempre exponemos el id del recurrente: los fijos con tarjeta lo usan
+        // para bajar la deuda del ledger al pagarse; los de fecha, para recorrer
+        // next_payment_date (eso sí sigue acotado a isDateBased vía intervalType).
+        recurringExpenseId: e.id,
         intervalType: isDateBased ? e.interval_type : null,
         currentNextPaymentDate: isDateBased ? (e.next_payment_date ?? null) : null,
       }]
