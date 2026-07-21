@@ -1,28 +1,30 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { nextPaymentDate, periodEndForDate } from './date-utils'
 import { payInstallment } from './pay-installment'
-import type { IntervalType } from '@/types/database'
 
-// Refleja en el ledger de tarjetas el pago de un fijo domiciliado a tarjeta,
-// para que la DEUDA de la tarjeta baje al pagarlo (no solo el rastreo de efectivo).
+// Refleja en el ledger de tarjetas el pago de un fijo domiciliado a tarjeta, de
+// modo que la DEUDA de la tarjeta baje al pagarlo (no solo el rastreo de efectivo).
 //
-// Estrategia:
-//  1. Si el cargo ya se materializó y pesa como deuda (cuota SIN pagar de este
-//     gasto recurrente en el ledger), se liquida la más antigua → la deuda baja.
-//  2. Si aún no se materializa (pago adelantado), se materializa el próximo cargo
-//     programado directamente como PAGADO y se recorre next_charge_date, para que
-//     el materializador automático no lo vuelva a crear como deuda (evita doble
-//     conteo). Usa source = `recurring-${fecha}` igual que materialize-charges,
-//     de modo que el índice único (source, source_id) protege contra duplicados.
+// Dos casos, según cómo esté registrada la deuda de ese cargo:
+//  1. El cargo está ITEMIZADO como cuota sin pagar (tarjetas cuyos cargos se
+//     materializan en el ledger, ej. compras o domiciliados con fecha de cargo):
+//     se liquida la cuota más antigua → la deuda baja de forma exacta.
+//  2. El cargo NO está itemizado: la deuda vive en el saldo de la tarjeta (saldo
+//     real capturado como 'ajuste'/balance manual). Se registra un ABONO — un
+//     'ajuste' de monto negativo — que baja el saldo por lo pagado. source_id
+//     queda nulo a propósito: el índice único (source, source_id) solo aplica
+//     con source_id no nulo, así que puedes abonar cada quincena sin colisión.
 //
-// Regresa true si tocó el ledger, false si no aplicaba (fijo sin tarjeta o sin
-// mecanismo de cargo domiciliado) o si la escritura fue bloqueada por RLS.
+// Regresa true si tocó el ledger, false si no aplicaba (fijo sin tarjeta) o si
+// la escritura fue bloqueada por RLS.
 export async function settleRecurringCardCharge(
   supabase: SupabaseClient,
   recurringExpenseId: string,
   paid: number,
 ): Promise<boolean> {
-  // ── 1. ¿Ya hay una cuota pendiente materializada de este domiciliado? ──
+  const amount = Math.round(paid * 100) / 100
+  if (amount < 0.01) return false
+
+  // ── 1. ¿Hay una cuota pendiente itemizada de este domiciliado? ──
   const { data: existing } = await supabase
     .from('card_expenses')
     .select('id, card_expense_installments(id, is_paid, due_period_date, amount)')
@@ -36,59 +38,53 @@ export async function settleRecurringCardCharge(
 
   if (unpaid.length > 0) {
     // Liquidar la cuota más antigua → la deuda de la tarjeta baja
-    return payInstallment(supabase, unpaid[0].id, paid)
+    return payInstallment(supabase, unpaid[0].id, amount)
   }
 
-  // ── 2. Pago adelantado: materializar el próximo cargo YA pagado ──
+  // ── 2. Sin cuota itemizada: abonar contra el saldo de la tarjeta ──
   const { data: re } = await supabase
     .from('recurring_expenses')
-    .select('concept, card_id, total_amount, interval_type, next_charge_date')
+    .select('concept, card_id')
     .eq('id', recurringExpenseId)
     .single()
 
   const r = re as any
-  // Sin tarjeta o sin fecha de cargo domiciliado → no hay deuda de tarjeta que mover
-  if (!r || !r.card_id || !r.next_charge_date) return false
+  if (!r || !r.card_id) return false // fijo sin tarjeta → no hay saldo que mover
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return false
 
-  const chargeDate: string = r.next_charge_date
+  const credit = -amount // 'ajuste' negativo = abono que baja el saldo
   const { data: expense, error } = await supabase
     .from('card_expenses')
     .insert({
-      owner_id:      user.id,
-      card_id:       r.card_id,
-      concept:       r.concept,
-      total_amount:  r.total_amount,
-      purchase_date: chargeDate,
-      months:        1,
-      expense_type:  'compra',
-      source:        `recurring-${chargeDate}`,
-      source_id:     recurringExpenseId,
-      notes:         'Cargo domiciliado (pagado por adelantado)',
+      owner_id:     user.id,
+      card_id:      r.card_id,
+      concept:      `Abono ${r.concept}`,
+      total_amount: credit,
+      months:       1,
+      expense_type: 'ajuste',
+      // sin source_id → múltiples abonos permitidos (índice único no aplica)
     })
     .select('id')
     .single()
 
-  // 23505 = ya materializado por otra carga; el índice único lo protege
   if (error || !expense) return false
 
-  await supabase.from('card_expense_installments').insert({
-    expense_id:      (expense as any).id,
-    number:          1,
-    amount:          r.total_amount,
-    due_period_date: periodEndForDate(chargeDate),
-    is_paid:         true,
-    paid_at:         new Date().toISOString(),
-  })
+  // due_period_date NULL: pesa en el saldo, no en la proyección de la quincena
+  const { error: instErr } = await supabase
+    .from('card_expense_installments')
+    .insert({
+      expense_id:      (expense as any).id,
+      number:          1,
+      amount:          credit,
+      due_period_date: null,
+      is_paid:         false,
+    })
 
-  // Recorrer la fecha para que el materializador no cree otra cuota (deuda) igual
-  const newDate = nextPaymentDate(chargeDate, r.interval_type as IntervalType)
-  await supabase
-    .from('recurring_expenses')
-    .update({ next_charge_date: newDate })
-    .eq('id', recurringExpenseId)
-
+  if (instErr) {
+    await supabase.from('card_expenses').delete().eq('id', (expense as any).id)
+    return false
+  }
   return true
 }
