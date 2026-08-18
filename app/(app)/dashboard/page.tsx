@@ -141,17 +141,19 @@ export default async function DashboardPage({
     { data: nextFijosByDay },
     { data: nextFijosByDate },
     { data: allCards },
-    { data: sharedConceptsRows },
+    { data: sharedRows },
     { data: settlementsRaw },
   ] = await Promise.all([
     supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']).or(`payment_day.eq.${nextPayDay},payment_day.eq.0,payment_day.is.null`).in('interval_type', ['quincenal', 'mensual']) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']).in('interval_type', ['bimestral', 'trimestral', 'anual', 'c/15 dias', 'c/21 dias']).gte('next_payment_date', nextStartStr).lte('next_payment_date', nextPeriodStr) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.from('cards').select('id, name').eq('is_active', true),
-    supabase.from('recurring_expenses_split').select('concept').eq('is_active', true).eq('ownership', 'shared') as Promise<{ data: { concept: string }[] | null }>,
+    supabase.from('recurring_expenses_split').select('id, concept, total_amount, lalo_amount, ale_amount, paid_by, card_id').eq('is_active', true).eq('ownership', 'shared') as Promise<{ data: any[] | null }>,
     (supabase.from('internal_debt_settlements') as any).select('*').eq('period_date', nextPeriodStr) as Promise<{ data: any[] | null }>,
   ])
   const settlements = (settlementsRaw ?? []) as any[]
-  const sharedConceptSet = new Set((sharedConceptsRows ?? []).map(r => r.concept))
+  const sharedConceptSet = new Set((sharedRows ?? []).map((r: any) => r.concept))
+  // Lookup por id: las cuotas materializadas sólo guardan source_id del recurrente
+  const sharedById = new Map<string, any>((sharedRows ?? []).map((r: any) => [r.id, r]))
   const cardNameMap = new Map((allCards ?? []).map(c => [c.id, c.name]))
 
   const nextFijos = [...(nextFijosByDay ?? []), ...(nextFijosByDate ?? [])]
@@ -201,6 +203,8 @@ export default async function DashboardPage({
   const totalIOwe     = pendingIOwe.reduce((s, x) => s + x.amount, 0)
   const totalOwesMe   = pendingOwesMe.reduce((s, x) => s + x.amount, 0)
 
+  const round2 = (n: number) => Math.round(n * 100) / 100
+
   // Monto pagado por concepto en el período (para descontar fijos pre/parcialmente pagados)
   const paidAmounts = new Map<string, number>()
   for (const p of payments ?? []) {
@@ -224,24 +228,42 @@ export default async function DashboardPage({
     debtId: string | null; creditorName: string | null
     totalInstallments: number | null; paidInstallments: number; dueDate: string | null
     recurringExpenseId: string | null; intervalType: string | null; currentNextPaymentDate: string | null
-    // Solo para gastos compartidos sin tarjeta que yo pago completo: `amount` es mi
-    // parte y estos exponen el desembolso total y lo que hay que recabar del otro.
+    // Gastos compartidos que yo desembolso completo: `amount` es sólo mi parte y
+    // estos exponen el desembolso total y lo que hay que recabar del otro.
     sharedTotal?: number | null
     sharedOtherAmount?: number | null
+    // Con tarjeta: importe que hay que liquidar en el ledger al pagar (el cargo
+    // completo del banco), aunque de mi quincena sólo salga `amount`.
+    ledgerAmount?: number | null
   }
   const nextItems: NextItem[] = [
     // Cuotas del ledger de tarjetas (una exhibición y MSI) que vencen esta quincena
     ...((dueInstallments ?? []) as any[])
       .filter(i => i.expense?.owner_id === userId && i.expense?.expense_type === 'compra')
-      .map(i => ({
-        key: i.id as string, concept: i.expense.concept as string, amount: i.amount as number,
-        card: i.expense.cards?.name ?? null,
-        type: (i.expense.months > 1 ? 'msi' : 'programado') as 'msi' | 'programado',
-        cardId: (i.expense.card_id ?? null) as string | null, installmentId: i.id as string,
-        debtId: null, creditorName: null,
-        totalInstallments: null, paidInstallments: 0, dueDate: null,
-        recurringExpenseId: null, intervalType: null, currentNextPaymentDate: null,
-      })),
+      .map(i => {
+        // Cargo domiciliado de un gasto compartido: el banco me cobró el total,
+        // pero de mi quincena sólo debe salir mi parte. Reparto proporcional para
+        // que también funcione sobre el resto de una cuota pagada a medias.
+        const src   = typeof i.expense?.source === 'string' && i.expense.source.startsWith('recurring-')
+          ? sharedById.get(i.expense.source_id as string)
+          : undefined
+        const ratio = src && src.total_amount > 0
+          ? (isLalo ? src.lalo_amount : src.ale_amount) / src.total_amount
+          : null
+        const mine  = ratio != null ? round2((i.amount as number) * ratio) : (i.amount as number)
+        return {
+          key: i.id as string, concept: i.expense.concept as string, amount: mine,
+          card: i.expense.cards?.name ?? null,
+          type: (i.expense.months > 1 ? 'msi' : 'programado') as 'msi' | 'programado',
+          cardId: (i.expense.card_id ?? null) as string | null, installmentId: i.id as string,
+          debtId: null, creditorName: null,
+          totalInstallments: null, paidInstallments: 0, dueDate: null,
+          recurringExpenseId: null, intervalType: null, currentNextPaymentDate: null,
+          sharedTotal:       ratio != null ? (i.amount as number) : null,
+          sharedOtherAmount: ratio != null ? round2((i.amount as number) - mine) : null,
+          ledgerAmount:      ratio != null ? (i.amount as number) : null,
+        }
+      }),
     ...(nextFijos)
       // Si es shared y lo paga el otro, no aparece en mi lista (queda como deuda interna)
       .filter(e => !(e.ownership === 'shared' && (e.paid_by === 'lalo' || e.paid_by === 'ale') && e.paid_by !== myOwnership))
@@ -250,21 +272,21 @@ export default async function DashboardPage({
       .flatMap(e => {
       const isDateBased = ['bimestral', 'trimestral', 'anual', 'c/15 dias', 'c/21 dias'].includes(e.interval_type)
       const cardName = e.card_id ? (cardNameMap.get(e.card_id) ?? null) : null
+      // En compartidos de mi quincena sale sólo mi parte, con o sin tarjeta.
       const sharedFullPayer = e.ownership === 'shared' && e.paid_by === myOwnership
       const myShare    = isLalo ? e.lalo_amount : e.ale_amount
-      const otherShare = isLalo ? e.ale_amount  : e.lalo_amount
-      // Compartido que yo pago SIN tarjeta: cobro sólo mi parte y dejo visible el
-      // desembolso total + lo que hay que recabar del otro. Con tarjeta seguimos
-      // usando el total: el ledger se movió por el importe completo y descontar
-      // sólo mi parte dejaría deuda fantasma en la tarjeta.
-      const splitMyShareOnly = sharedFullPayer && !e.card_id
-      const baseAmount = e.ownership === 'shared'
-        ? (sharedFullPayer && !splitMyShareOnly ? e.total_amount : myShare)
-        : e.total_amount
+      const baseAmount = e.ownership === 'shared' ? myShare : e.total_amount
       // Descontar lo ya pagado del concepto: pagos parciales dejan visible solo el restante
       const paidAmt = paidAmounts.get(`${e.concept}|${e.card_id ?? ''}`) ?? 0
       const amount = Math.round((baseAmount - paidAmt) * 100) / 100
       if (amount < 0.01) return []
+      // Desembolso completo que sigue pendiente, en la misma proporción que `amount`
+      // (tras un pago parcial baja a la par). Con tarjeta es lo que hay que liquidar
+      // en el ledger: el banco cargó el total y abonar sólo mi parte dejaría deuda
+      // fantasma; la parte del otro se recupera en la sección de cuentas internas.
+      const fullPending = sharedFullPayer && myShare > 0
+        ? round2(e.total_amount * (amount / myShare))
+        : null
       return [{
         key: e.id, concept: e.concept,
         amount,
@@ -278,8 +300,9 @@ export default async function DashboardPage({
         recurringExpenseId: e.id,
         intervalType: isDateBased ? e.interval_type : null,
         currentNextPaymentDate: isDateBased ? (e.next_payment_date ?? null) : null,
-        sharedTotal:       splitMyShareOnly ? e.total_amount : null,
-        sharedOtherAmount: splitMyShareOnly ? otherShare     : null,
+        sharedTotal:       fullPending,
+        sharedOtherAmount: fullPending != null ? round2(fullPending - amount) : null,
+        ledgerAmount:      fullPending != null && e.card_id ? fullPending : null,
       }]
     }),
     ...(nextDebts ?? []).map(d => ({
@@ -312,10 +335,16 @@ export default async function DashboardPage({
 
   // Sin tarjeta: mi parte (lo que sale de mi bolsa) vs. el desembolso total y lo
   // que tengo que recabar del otro para completar los gastos compartidos.
-  const round2 = (n: number) => Math.round(n * 100) / 100
+  const cardItems       = cardGroups.flatMap(g => g.items)
+  const cardsMine       = round2(cardItems.reduce((s, i) => s + i.amount, 0))
+  const cardsToCollect  = round2(cardItems.reduce((s, i) => s + (i.sharedOtherAmount ?? 0), 0))
+  const cardsFull       = round2(cardsMine + cardsToCollect)
   const noCardMine      = round2(noCardItems.reduce((s, i) => s + i.amount, 0))
   const noCardToCollect = round2(noCardItems.reduce((s, i) => s + (i.sharedOtherAmount ?? 0), 0))
   const noCardFull      = round2(noCardMine + noCardToCollect)
+  const totalMine       = round2(cardsMine + noCardMine)
+  const sharedToCollect = round2(cardsToCollect + noCardToCollect)
+  const totalFull       = round2(totalMine + sharedToCollect)
 
 
   // Agrupar pagos registrados: por tarjeta · gastos casa (shared sin tarjeta) · otros
@@ -512,11 +541,26 @@ export default async function DashboardPage({
                   items={group.items}
                   periodId={activePeriodId}
                   linkedDebts={debtsByCard.get(group.cardId)}
+                  otherName={otherName}
                 />
               ))}
-              <div className="pt-2 border-t border-gray-100 flex justify-between text-xs font-semibold text-gray-500">
-                <span>Subtotal tarjetas</span>
-                <span>{formatMXN(cardGroups.reduce((s, g) => s + g.items.reduce((si, i) => si + i.amount, 0), 0))}</span>
+              <div className="pt-2 border-t border-gray-100 space-y-1">
+                <div className="flex justify-between text-xs font-semibold text-gray-500">
+                  <span>Subtotal tarjetas{cardsToCollect > 0 ? ' (mi parte)' : ''}</span>
+                  <span>{formatMXN(cardsMine)}</span>
+                </div>
+                {cardsToCollect > 0 && (
+                  <>
+                    <div className="flex justify-between text-xs text-gray-400">
+                      <span>Cargo total de las tarjetas</span>
+                      <span>{formatMXN(cardsFull)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs font-semibold text-green-700">
+                      <span>A recibir de {otherName}</span>
+                      <span>{formatMXN(cardsToCollect)}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -596,8 +640,18 @@ export default async function DashboardPage({
 
           {/* Total general próxima quincena */}
           <div className="flex justify-between items-center px-1 py-1">
-            <span className="text-sm font-bold text-gray-700">Total estimado</span>
-            <span className="text-sm font-bold text-gray-900">{formatMXN(nextItems.reduce((s, i) => s + i.amount, 0))}</span>
+            <span className="text-sm font-bold text-gray-700">
+              Total estimado{sharedToCollect > 0 ? ' (mi parte)' : ''}
+            </span>
+            <div className="text-right">
+              <span className="text-sm font-bold text-gray-900">{formatMXN(totalMine)}</span>
+              {sharedToCollect > 0 && (
+                <p className="text-[10px] font-normal text-gray-400">
+                  Desembolso {formatMXN(totalFull)} · a recibir de {otherName}{' '}
+                  <span className="text-green-600 font-medium">{formatMXN(sharedToCollect)}</span>
+                </p>
+              )}
+            </div>
           </div>
         </>
       )}
