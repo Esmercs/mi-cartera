@@ -13,6 +13,7 @@ import UnsettleInternalDebtButton from '@/components/dashboard/unsettle-internal
 import DeletePeriodPaymentButton from '@/components/dashboard/delete-period-payment-button'
 import AddIncomeForm from '@/components/dashboard/add-income-form'
 import RegisterNextPaymentButton from '@/components/dashboard/register-next-payment-button'
+import RegisterCreditPaymentButton from '@/components/tarjetas/register-credit-payment-button'
 import CollapsibleCardGroup, { type LinkedDebt } from '@/components/dashboard/collapsible-card-group'
 import PeriodSelector from '@/components/shared/period-selector'
 import MonthlySummaryChart from '@/components/dashboard/monthly-summary-chart'
@@ -143,12 +144,17 @@ export default async function DashboardPage({
     { data: allCards },
     { data: sharedRows },
     { data: settlementsRaw },
+    { data: dueCredits },
   ] = await Promise.all([
     supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']).or(`payment_day.eq.${nextPayDay},payment_day.eq.0,payment_day.is.null`).in('interval_type', ['quincenal', 'mensual']) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']).in('interval_type', ['bimestral', 'trimestral', 'anual', 'c/15 dias', 'c/21 dias']).gte('next_payment_date', nextStartStr).lte('next_payment_date', nextPeriodStr) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.from('cards').select('id, name').eq('is_active', true),
     supabase.from('recurring_expenses_split').select('id, concept, total_amount, lalo_amount, ale_amount, paid_by, card_id').eq('is_active', true).eq('ownership', 'shared') as Promise<{ data: any[] | null }>,
     (supabase.from('internal_debt_settlements') as any).select('*').eq('period_date', nextPeriodStr) as Promise<{ data: any[] | null }>,
+    // Créditos cuyo día de pago cae en el corte de esta quincena
+    supabase.from('credits_split').select('*')
+      .eq('is_active', true)
+      .eq('payment_day', nextPayDay) as unknown as Promise<{ data: any[] | null }>,
   ])
   const settlements = (settlementsRaw ?? []) as any[]
   const sharedConceptSet = new Set((sharedRows ?? []).map((r: any) => r.concept))
@@ -223,7 +229,7 @@ export default async function DashboardPage({
   // Unificar en una lista ordenada por monto descendente
   type NextItem = {
     key: string; concept: string; amount: number; card: string | null
-    type: 'fijo' | 'msi' | 'programado' | 'deuda'
+    type: 'fijo' | 'msi' | 'programado' | 'deuda' | 'credito'
     cardId: string | null; installmentId: string | null
     debtId: string | null; creditorName: string | null
     totalInstallments: number | null; paidInstallments: number; dueDate: string | null
@@ -235,6 +241,8 @@ export default async function DashboardPage({
     // Con tarjeta: importe que hay que liquidar en el ledger al pagar (el cargo
     // completo del banco), aunque de mi quincena sólo salga `amount`.
     ledgerAmount?: number | null
+    // Crédito de credits_split al que corresponde este item (para el diálogo de abono)
+    creditId?: string | null
   }
   const nextItems: NextItem[] = [
     // Cuotas del ledger de tarjetas (una exhibición y MSI) que vencen esta quincena
@@ -305,6 +313,33 @@ export default async function DashboardPage({
         ledgerAmount:      fullPending != null && e.card_id ? fullPending : null,
       }]
     }),
+    // Créditos: la cuota fija de este mes. Mismo desdoblamiento que los compartidos
+    // con tarjeta — mi parte pesa en la quincena, el ledger se mueve por el completo.
+    ...((dueCredits ?? []) as any[]).flatMap(c => {
+      const myShare    = Number(isLalo ? c.lalo_payment : c.ale_payment)
+      const otherShare = Number(isLalo ? c.ale_payment  : c.lalo_payment)
+      const iDisburse  = c.ownership === 'shared' && c.paid_by === myOwnership
+      // Si lo paga el otro, mi parte es deuda interna, no un pago mío de esta quincena
+      if (c.ownership === 'shared' && (c.paid_by === 'lalo' || c.paid_by === 'ale') && !iDisburse) return []
+      const paidAmt = paidAmounts.get(`${c.name}|`) ?? 0
+      const amount  = round2(myShare - paidAmt)
+      if (amount < 0.01) return []
+      const fullPending = iDisburse && myShare > 0
+        ? round2(Number(c.monthly_payment) * (amount / myShare))
+        : null
+      return [{
+        key: `credit-${c.id}`, concept: c.name, amount,
+        card: null, type: 'credito' as const,
+        cardId: null, installmentId: null,
+        debtId: null, creditorName: null,
+        totalInstallments: null, paidInstallments: 0, dueDate: null,
+        recurringExpenseId: null, intervalType: null, currentNextPaymentDate: null,
+        sharedTotal:       fullPending,
+        sharedOtherAmount: fullPending != null ? round2(fullPending - amount) : null,
+        ledgerAmount:      null,
+        creditId:          c.id,
+      }]
+    }),
     ...(nextDebts ?? []).map(d => ({
       key: d.id, concept: d.concept, amount: d.amount,
       card: null, type: 'deuda' as const,
@@ -332,6 +367,11 @@ export default async function DashboardPage({
     }
   }
   const cardGroups = Array.from(cardGroupMap.values())
+
+  // Saldo por crédito, para que el diálogo de abono pueda topar al saldo
+  const creditBalanceById = new Map<string, number>(
+    ((dueCredits ?? []) as any[]).map(c => [c.id as string, Number(c.balance)])
+  )
 
   // Sin tarjeta: mi parte (lo que sale de mi bolsa) vs. el desembolso total y lo
   // que tengo que recabar del otro para completar los gastos compartidos.
@@ -575,12 +615,14 @@ export default async function DashboardPage({
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-gray-800 truncate font-medium">{item.concept}</p>
                       <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded font-medium mt-0.5 ${
-                        item.type === 'fijo'  ? 'bg-blue-50 text-blue-600' :
-                        item.type === 'msi'   ? 'bg-purple-50 text-purple-600' :
-                        item.type === 'deuda' ? 'bg-red-50 text-red-600' :
+                        item.type === 'fijo'    ? 'bg-blue-50 text-blue-600' :
+                        item.type === 'msi'     ? 'bg-purple-50 text-purple-600' :
+                        item.type === 'credito' ? 'bg-indigo-50 text-indigo-600' :
+                        item.type === 'deuda'   ? 'bg-red-50 text-red-600' :
                         'bg-orange-50 text-orange-600'
                       }`}>
                         {item.type === 'fijo' ? 'Fijo' : item.type === 'msi' ? 'MSI' :
+                         item.type === 'credito' ? 'Crédito' :
                          item.type === 'deuda' ? `→ ${item.creditorName ?? 'deuda'}` : 'Programado'}
                       </span>
                       {item.sharedTotal != null && (
@@ -597,6 +639,21 @@ export default async function DashboardPage({
                         <span className="text-xs text-gray-400 bg-gray-50 border border-gray-200 px-2 py-1 rounded-lg whitespace-nowrap">
                           Confirma {item.creditorName ?? otherName}
                         </span>
+                      ) : item.type === 'credito' && item.creditId ? (
+                        // monthInterest={0}: el dashboard no carga el ledger de movimientos
+                        // del crédito y no vale traerlo solo para esta advertencia. La
+                        // advertencia completa (con interés real) vive en /tarjetas.
+                        <RegisterCreditPaymentButton
+                          creditId={item.creditId}
+                          creditName={item.concept}
+                          balance={creditBalanceById.get(item.creditId) ?? item.amount}
+                          monthlyPayment={item.sharedTotal ?? item.amount}
+                          myPayment={item.amount}
+                          otherPayment={item.sharedOtherAmount ?? 0}
+                          monthInterest={0}
+                          otherName={otherName}
+                          periodId={activePeriodId}
+                        />
                       ) : (
                         <RegisterNextPaymentButton
                           periodId={activePeriodId}
