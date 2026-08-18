@@ -71,10 +71,30 @@ export default async function GastosFijosPage() {
   const personal = allExpenses?.filter(e => e.ownership === myOwnership) ?? []
   const shared   = allExpenses?.filter(e => e.ownership === 'shared') ?? []
 
-  const mySharedTotal  = isLalo
-    ? shared.reduce((s, e) => s + e.lalo_amount, 0)
-    : shared.reduce((s, e) => s + e.ale_amount, 0)
-  const personalTotal = personal.reduce((s, e) => s + e.total_amount, 0)
+  const round2 = (n: number) => Math.round(n * 100) / 100
+  const otherName = isLalo ? 'Ale' : 'Lalo'
+  const myPart    = (e: RecurringExpenseSplit) => isLalo ? e.lalo_amount : e.ale_amount
+  const otherPart = (e: RecurringExpenseSplit) => isLalo ? e.ale_amount  : e.lalo_amount
+  // Yo desembolso el compartido completo → la parte del otro es a recabar
+  const iDisburse = (e: RecurringExpenseSplit) => e.paid_by === myOwnership
+
+  const mySharedTotal   = round2(shared.reduce((s, e) => s + myPart(e), 0))
+  const personalTotal   = round2(personal.reduce((s, e) => s + e.total_amount, 0))
+  const sharedTotal     = round2(shared.reduce((s, e) => s + e.total_amount, 0))
+  // Lo que pongo de más en los compartidos que yo pago y el otro me repone
+  const toCollectTotal  = round2(shared.filter(iDisburse).reduce((s, e) => s + otherPart(e), 0))
+  // Mi parte de los compartidos que paga el otro: eso se lo repongo yo
+  const toRepayTotal    = round2(
+    shared.filter(e => !iDisburse(e) && e.paid_by && e.paid_by !== 'each')
+          .reduce((s, e) => s + myPart(e), 0)
+  )
+  // Efectivo que sale por mis manos: mis personales + el cargo completo de los
+  // compartidos que yo pago + mi parte en los de «cada quien»
+  const myOutlay = round2(
+    personalTotal
+    + shared.filter(iDisburse).reduce((s, e) => s + e.total_amount, 0)
+    + shared.filter(e => !e.paid_by || e.paid_by === 'each').reduce((s, e) => s + myPart(e), 0)
+  )
 
   return (
     <div className="space-y-4 max-w-5xl">
@@ -115,9 +135,29 @@ export default async function GastosFijosPage() {
         <div className="card p-3 md:p-4 bg-brand-50 col-span-2">
           <p className="text-xs text-brand-700 font-medium">Total mi responsabilidad</p>
           <p className="text-lg md:text-xl font-bold text-brand-800 mt-1">
-            {formatMXN(personalTotal + mySharedTotal)}
+            {formatMXN(round2(personalTotal + mySharedTotal))}
           </p>
           <p className="text-xs text-brand-500">/ mes</p>
+          {(toCollectTotal > 0 || toRepayTotal > 0) && (
+            <div className="mt-2 pt-2 border-t border-brand-100 space-y-1">
+              <div className="flex justify-between text-xs text-brand-500">
+                <span>Sale por mis manos</span>
+                <span>{formatMXN(myOutlay)}</span>
+              </div>
+              {toCollectTotal > 0 && (
+                <div className="flex justify-between text-xs font-semibold text-green-700">
+                  <span>A recibir de {otherName}</span>
+                  <span>{formatMXN(toCollectTotal)}</span>
+                </div>
+              )}
+              {toRepayTotal > 0 && (
+                <div className="flex justify-between text-xs font-semibold text-red-600">
+                  <span>A reponerle a {otherName}</span>
+                  <span>{formatMXN(toRepayTotal)}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -137,8 +177,9 @@ export default async function GastosFijosPage() {
         <h2 className="font-semibold text-gray-800 text-sm flex items-center gap-2">
           Gastos compartidos
           <span className="badge-shared">Los 2</span>
-          <span className="text-xs text-gray-400 font-normal ml-auto">
-            {formatMXN(shared.reduce((s, e) => s + e.total_amount, 0))}/mes
+          <span className="text-xs font-normal ml-auto text-right">
+            <span className="text-gray-600 font-semibold">{formatMXN(mySharedTotal)}</span>
+            <span className="text-gray-400"> mi parte de {formatMXN(sharedTotal)}/mes</span>
           </span>
         </h2>
         <ExpenseTable expenses={shared} showSplit isLalo={isLalo} cardMap={cardMap} />
@@ -334,6 +375,21 @@ function ExpenseTable({
     return <p className="text-sm text-gray-400">Sin gastos registrados.</p>
   }
 
+  const round2    = (n: number) => Math.round(n * 100) / 100
+  const otherName = isLalo ? 'Ale' : 'Lalo'
+  const myPart    = (e: RecurringExpenseSplit) => isLalo ? e.lalo_amount : e.ale_amount
+  const otherPart = (e: RecurringExpenseSplit) => isLalo ? e.ale_amount  : e.lalo_amount
+  // Compartido que yo desembolso completo: la parte del otro es a recabar
+  const iDisburse = (e: RecurringExpenseSplit) => e.paid_by === (isLalo ? 'lalo' : 'ale')
+  // El importe que pesa sobre mí siempre es mi parte; en personales es el total
+  const rowMine   = (e: RecurringExpenseSplit) => showSplit ? myPart(e) : e.total_amount
+
+  const sumTotal   = round2(expenses.reduce((s, e) => s + e.total_amount, 0))
+  const sumMine    = round2(expenses.reduce((s, e) => s + rowMine(e), 0))
+  const sumLalo    = round2(expenses.reduce((s, e) => s + e.lalo_amount, 0))
+  const sumAle     = round2(expenses.reduce((s, e) => s + e.ale_amount, 0))
+  const sumCollect = round2(expenses.filter(iDisburse).reduce((s, e) => s + otherPart(e), 0))
+
   return (
     <>
       {/* Mobile: card list */}
@@ -353,14 +409,20 @@ function ExpenseTable({
               </p>
               {showSplit && (
                 <p className="text-xs mt-0.5">
-                  <span className="text-lalo">{formatMXN(e.lalo_amount)}</span>
+                  <span className="text-gray-400">Total {formatMXN(e.total_amount)}</span>
                   <span className="text-gray-300 mx-1">·</span>
-                  <span className="text-ale">{formatMXN(e.ale_amount)}</span>
+                  {iDisburse(e) ? (
+                    <span className="text-green-600 font-medium">
+                      recabas {formatMXN(otherPart(e))} de {otherName}
+                    </span>
+                  ) : (
+                    <span className="text-gray-400">{otherName} {formatMXN(otherPart(e))}</span>
+                  )}
                 </p>
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <span className="text-sm font-semibold text-gray-800">{formatMXN(e.total_amount)}</span>
+              <span className="text-sm font-semibold text-gray-800">{formatMXN(rowMine(e))}</span>
               <EditExpenseButton
                 id={e.id}
                 concept={e.concept}
@@ -378,6 +440,24 @@ function ExpenseTable({
             </div>
           </div>
         ))}
+        {showSplit && (
+          <div className="pt-2 border-t border-gray-100 space-y-1">
+            <div className="flex justify-between text-xs font-semibold text-gray-500">
+              <span>Mi parte</span>
+              <span>{formatMXN(sumMine)}</span>
+            </div>
+            <div className="flex justify-between text-xs text-gray-400">
+              <span>Total compartido</span>
+              <span>{formatMXN(sumTotal)}</span>
+            </div>
+            {sumCollect > 0 && (
+              <div className="flex justify-between text-xs font-semibold text-green-700">
+                <span>A recibir de {otherName}</span>
+                <span>{formatMXN(sumCollect)}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Desktop: table */}
@@ -389,8 +469,8 @@ function ExpenseTable({
               <th className="pb-2 font-medium">Total</th>
               {showSplit && (
                 <>
-                  <th className="pb-2 font-medium text-lalo">Lalo</th>
-                  <th className="pb-2 font-medium text-ale">Ale</th>
+                  <th className="pb-2 font-medium text-lalo">Lalo{isLalo && ' (tú)'}</th>
+                  <th className="pb-2 font-medium text-ale">Ale{!isLalo && ' (tú)'}</th>
                 </>
               )}
               <th className="pb-2 font-medium">Intervalo</th>
@@ -407,8 +487,14 @@ function ExpenseTable({
                 <td className="py-2.5 text-gray-700">{formatMXN(e.total_amount)}</td>
                 {showSplit && (
                   <>
-                    <td className="py-2.5 text-lalo font-medium">{formatMXN(e.lalo_amount)}</td>
-                    <td className="py-2.5 text-ale font-medium">{formatMXN(e.ale_amount)}</td>
+                    <td className={`py-2.5 text-lalo ${isLalo ? 'font-bold' : 'font-medium'}`}>
+                      {formatMXN(e.lalo_amount)}
+                      {!isLalo && iDisburse(e) && <CollectTag otherName={otherName} />}
+                    </td>
+                    <td className={`py-2.5 text-ale ${!isLalo ? 'font-bold' : 'font-medium'}`}>
+                      {formatMXN(e.ale_amount)}
+                      {isLalo && iDisburse(e) && <CollectTag otherName={otherName} />}
+                    </td>
                   </>
                 )}
                 <td className="py-2.5 text-gray-500">{intervalLabel(e.interval_type)}</td>
@@ -448,8 +534,43 @@ function ExpenseTable({
               </tr>
             ))}
           </tbody>
+          {showSplit && (
+            <tfoot>
+              <tr className="border-t-2 border-gray-200 text-xs">
+                <td className="pt-2 font-semibold text-gray-500">Totales</td>
+                <td className="pt-2 text-gray-500">{formatMXN(sumTotal)}</td>
+                <td className={`pt-2 text-lalo ${isLalo ? 'font-bold' : 'font-semibold'}`}>{formatMXN(sumLalo)}</td>
+                <td className={`pt-2 text-ale ${!isLalo ? 'font-bold' : 'font-semibold'}`}>{formatMXN(sumAle)}</td>
+                <td className="pt-2" colSpan={5}>
+                  {sumCollect > 0 && (
+                    <span className="text-green-700 font-semibold">
+                      A recibir de {otherName}: {formatMXN(sumCollect)}
+                    </span>
+                  )}
+                </td>
+              </tr>
+              <tr className="text-xs">
+                <td className="pt-1 text-gray-400" colSpan={9}>
+                  Mi parte: <span className="font-semibold text-gray-600">{formatMXN(sumMine)}</span>
+                  {' '}de {formatMXN(sumTotal)}. «A recibir» es lo que pones tú y {otherName} te repone.
+                </td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     </>
+  )
+}
+
+// Marca la parte del otro en un compartido que yo desembolso completo
+function CollectTag({ otherName }: { otherName: string }) {
+  return (
+    <span
+      className="text-green-600 text-[10px] ml-1 font-medium"
+      title={`Lo pones tú y ${otherName} te lo repone`}
+    >
+      a recabar
+    </span>
   )
 }
