@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS credits (
   annual_rate     DECIMAL(6,3) NOT NULL DEFAULT 0 CHECK (annual_rate >= 0),
   term_months     INTEGER NOT NULL CHECK (term_months > 0),
   monthly_payment DECIMAL(12,2) NOT NULL CHECK (monthly_payment > 0),
-  -- Solo 15 y 30: son los únicos cortes de quincena que existe (getOffsetPeriodDates
+  -- Solo 15 y 30: son los únicos cortes de quincena que existen (getOffsetPeriodDates
   -- devuelve payDay 15|30). Otro valor haría que el crédito no salga en ninguna quincena.
   payment_day     SMALLINT NOT NULL DEFAULT 15 CHECK (payment_day IN (15, 30)),
   started_at      DATE NOT NULL DEFAULT CURRENT_DATE,
@@ -216,7 +216,7 @@ git commit -m "Add credits and loans schema with derived balance ledger"
 
 **No corras `supabase db push`.** Dile al usuario:
 
-> La migración `029_credits.sql` está lista y commiteada. Necesito tu permiso para aplicarla con `supabase db push` — crea 3 tablas, 1 vista y 11 políticas RLS. ¿Le doy?
+> La migración `029_credits.sql` está lista y commiteada. Necesito tu permiso para aplicarla con `supabase db push` — crea 3 tablas, 1 vista y 10 políticas RLS. ¿Le doy?
 
 Espera respuesta. Si el usuario prefiere aplicarla él, las tareas siguientes se pueden escribir igual, pero **no van a funcionar en runtime** hasta que exista el esquema.
 

@@ -127,6 +127,7 @@ export default async function AnalisisPage({
       sharedOtherAmount: iDisburse ? other : null,
     }
   })
+  creditItems.sort((a, b) => b.monthly - a.monthly)   // el más caro primero, como los MSI
   const creditsMonthly = Math.round(creditItems.reduce((s, i) => s + i.monthly, 0) * 100) / 100
 
   const analysis = analyzeFinances({
