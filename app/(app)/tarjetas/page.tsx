@@ -12,6 +12,7 @@ import DeleteCardButton from '@/components/tarjetas/delete-card-button'
 import AdjustBalanceForm from '@/components/tarjetas/adjust-balance-form'
 import CardExpensesGroup, { type ExpenseRow } from '@/components/tarjetas/card-expenses-group'
 import { materializeCardCharges } from '@/lib/utils/materialize-charges'
+import { accrueCreditInterest } from '@/lib/utils/accrue-credit-interest'
 import PayInstallmentButton from '@/components/tarjetas/pay-installment-button'
 
 export default async function TarjetasPage() {
@@ -29,6 +30,9 @@ export default async function TarjetasPage() {
 
   // Materializar cargos domiciliados cuya fecha de cobro ya llegó
   await materializeCardCharges(supabase as any, ownership, userId)
+
+  // Devengar el interés mensual pendiente de los créditos (perezoso, idempotente)
+  await accrueCreditInterest(supabase as any)
 
   const [{ data: cards }, { data: expenses }, { data: cardDebts }] = await Promise.all([
     supabase.from('cards').select('*')
