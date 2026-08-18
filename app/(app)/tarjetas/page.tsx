@@ -179,7 +179,14 @@ export default async function TarjetasPage() {
 
   // El saldo de créditos NO entra a totalUsedPct: un préstamo no tiene línea de
   // crédito, y meterlo inflaría el "% del crédito disponible".
+  //
+  // Se suma MI PARTE del saldo (lalo_balance/ale_balance de la vista), no el saldo
+  // completo con el banco: esta cifra es "mi deuda", y en un crédito compartido la
+  // parte del otro no es deuda mía. El completo se muestra aparte como contexto.
   const creditsBalance = Math.round(
+    (credits ?? []).reduce((s, c) => s + Number(isLalo ? c.lalo_balance : c.ale_balance), 0) * 100
+  ) / 100
+  const creditsFullBalance = Math.round(
     (credits ?? []).reduce((s, c) => s + Number(c.balance), 0) * 100
   ) / 100
   const totalOwed = Math.round((totalDebt + creditsBalance) * 100) / 100
@@ -224,6 +231,9 @@ export default async function TarjetasPage() {
             {creditsBalance > 0 && (
               <p className="text-xs text-gray-400 mt-0.5">
                 tarjetas {formatMXN(totalDebt)} · créditos {formatMXN(creditsBalance)}
+                {creditsFullBalance !== creditsBalance && (
+                  <span className="text-gray-300"> (mi parte de {formatMXN(creditsFullBalance)})</span>
+                )}
               </p>
             )}
             {totalUsedPct !== null && (

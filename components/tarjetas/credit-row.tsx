@@ -7,8 +7,11 @@ import { formatShortDate } from '@/lib/utils/date-utils'
 export interface CreditRowData {
   id: string
   name: string
-  principal: number
-  balance: number
+  principal: number        // monto original completo
+  myBalance: number        // MI parte de lo que falta por pagar — el número que manda
+  fullBalance: number      // lo que se le debe al banco, completo
+  otherBalance: number     // parte del otro en el saldo; > 0 solo si yo desembolso
+  paidPct: number          // % del principal ya liquidado (se calcula sobre los totales)
   myPayment: number        // mi parte de la cuota
   otherPayment: number     // parte del otro; > 0 solo si yo desembolso
   monthlyPayment: number   // cuota completa al banco
@@ -36,10 +39,10 @@ export default function CreditRow({
   children?: React.ReactNode   // botones de acción (abono, editar, borrar, recalcular)
 }) {
   const [open, setOpen] = useState(false)
-  // Avance sobre el monto original: cuánto del principal ya no debes
-  const paidPct = credit.principal > 0
-    ? Math.max(0, Math.min(100, Math.round((1 - credit.balance / credit.principal) * 100)))
-    : 0
+  // paidPct llega ya calculado sobre los totales. Calcularlo aquí con myBalance
+  // contra el principal completo daría un avance falso.
+  const paidPct = credit.paidPct
+  const isShared = credit.otherBalance > 0
 
   return (
     <div className="card overflow-hidden">
@@ -60,8 +63,10 @@ export default function CreditRow({
           </div>
         </button>
         <div className="text-right shrink-0">
-          <p className="text-sm font-bold text-red-600">{formatMXN(credit.balance)}</p>
-          <p className="text-[10px] text-gray-400">{paidPct}% liquidado</p>
+          <p className="text-sm font-bold text-red-600">{formatMXN(credit.myBalance)}</p>
+          <p className="text-[10px] text-gray-400">
+            {isShared ? <>de {formatMXN(credit.fullBalance)} · </> : null}{paidPct}% liquidado
+          </p>
         </div>
       </div>
 
@@ -74,8 +79,24 @@ export default function CreditRow({
       {open && (
         <div className="border-t border-gray-100 px-3 py-2.5 space-y-2">
           <div className="space-y-1">
+            {isShared && (
+              <>
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>Saldo con el banco</span>
+                  <span>{formatMXN(credit.fullBalance)}</span>
+                </div>
+                <div className="flex justify-between text-xs font-semibold text-gray-600">
+                  <span>Mi parte del saldo</span>
+                  <span>{formatMXN(credit.myBalance)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>Parte de {otherName}</span>
+                  <span>{formatMXN(credit.otherBalance)}</span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between text-xs text-gray-500">
-              <span>Interés devengado este mes</span>
+              <span>Interés devengado este mes{isShared ? ' (completo)' : ''}</span>
               <span>{formatMXN(credit.monthInterest)}</span>
             </div>
             <div className="flex justify-between text-xs font-semibold text-gray-600">
