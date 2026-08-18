@@ -16,13 +16,30 @@ export const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   otros:         'Otros',
 }
 
-// Equivalente mensual de un gasto según su intervalo
-export function monthlyEquivalent(amount: number, interval: IntervalType): number {
+// Equivalente mensual de un gasto según su intervalo y su día de pago.
+//
+// En 'quincenal' y 'mensual' la frecuencia real la manda payment_day, no el
+// intervalo: el Dashboard lista el gasto en la quincena cuyo corte coincide con
+// payment_day, y en AMBAS (15 y 30) cuando es 0 o null. Así, un 'mensual' con
+// «15 y 30» se cobra dos veces al mes y un 'quincenal' atado a un solo día se
+// cobra una — mensualizar por el intervalo solo descuadraba contra el Dashboard.
+//
+// `paymentDay` omitido (undefined) conserva el comportamiento por intervalo;
+// pásalo siempre que tengas la fila para que los totales coincidan.
+export function monthlyEquivalent(
+  amount: number,
+  interval: IntervalType,
+  paymentDay?: number | null,
+): number {
   switch (interval) {
     case 'quincenal':
+    case 'mensual': {
+      if (paymentDay === undefined) return interval === 'quincenal' ? amount * 2 : amount
+      // 0 / null = sin día fijo → cae en las dos quincenas
+      return paymentDay === 0 || paymentDay === null ? amount * 2 : amount
+    }
     case 'c/15 dias':  return amount * 2
     case 'c/21 dias':  return amount * 1.45
-    case 'mensual':    return amount
     case 'bimestral':  return amount / 2
     case 'trimestral': return amount / 3
     case 'anual':      return amount / 12

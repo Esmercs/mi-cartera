@@ -72,10 +72,10 @@ export default async function AnalisisPage({
     const otherPart = isLalo ? e.ale_amount : e.lalo_amount
     return {
       concept: e.concept,
-      monthly: monthlyEquivalent(myPart, e.interval_type),
+      monthly: monthlyEquivalent(myPart, e.interval_type, e.payment_day),
       category: (e as any).category ?? 'otros',
-      sharedTotal:       iDisburse ? monthlyEquivalent(e.total_amount, e.interval_type) : null,
-      sharedOtherAmount: iDisburse ? monthlyEquivalent(otherPart, e.interval_type) : null,
+      sharedTotal:       iDisburse ? monthlyEquivalent(e.total_amount, e.interval_type, e.payment_day) : null,
+      sharedOtherAmount: iDisburse ? monthlyEquivalent(otherPart, e.interval_type, e.payment_day) : null,
     }
   })
 

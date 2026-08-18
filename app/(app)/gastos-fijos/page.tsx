@@ -83,7 +83,7 @@ export default async function GastosFijosPage() {
   // intervalos distintos no significa nada (una quincenal pesa el doble que su
   // monto, una bimestral la mitad). Coincide con la sección de Análisis.
   const perMonth = (e: RecurringExpenseSplit, amount: number) =>
-    monthlyEquivalent(amount, e.interval_type)
+    monthlyEquivalent(amount, e.interval_type, e.payment_day)
 
   const mySharedTotal   = round2(shared.reduce((s, e) => s + perMonth(e, myPart(e)), 0))
   const personalTotal   = round2(personal.reduce((s, e) => s + perMonth(e, e.total_amount), 0))
@@ -394,8 +394,12 @@ function ExpenseTable({
   // Los totales son mensualizados; las filas siguen mostrando el cargo real de
   // cada cobro, así que una fila quincenal pesa el doble en el total.
   const perMonth   = (e: RecurringExpenseSplit, amount: number) =>
-    monthlyEquivalent(amount, e.interval_type)
-  const isMonthly  = (e: RecurringExpenseSplit) => e.interval_type === 'mensual'
+    monthlyEquivalent(amount, e.interval_type, e.payment_day)
+  // ¿El monto de la fila ya ES su equivalente mensual? Se deriva del factor real
+  // (que ahora depende de payment_day), no del intervalo: un 'mensual' con «15 y 30»
+  // se cobra dos veces al mes y también necesita la nota.
+  const sameAsMonthly = (e: RecurringExpenseSplit) =>
+    Math.abs(perMonth(e, 1000) - 1000) < 0.01
 
   const sumTotal   = round2(expenses.reduce((s, e) => s + perMonth(e, e.total_amount), 0))
   const sumMine    = round2(expenses.reduce((s, e) => s + perMonth(e, rowMine(e)), 0))
@@ -433,7 +437,7 @@ function ExpenseTable({
                   )}
                 </p>
               )}
-              {!isMonthly(e) && (
+              {!sameAsMonthly(e) && (
                 <p className="text-[10px] text-gray-400 mt-0.5">
                   ≡ {formatMXN(perMonth(e, rowMine(e)))}/mes de mi parte
                 </p>
@@ -521,7 +525,7 @@ function ExpenseTable({
                 )}
                 <td className="py-2.5 text-gray-500">
                   {intervalLabel(e.interval_type)}
-                  {!isMonthly(e) && (
+                  {!sameAsMonthly(e) && (
                     <span className="block text-[10px] text-gray-400">
                       ≡ {formatMXN(perMonth(e, rowMine(e)))}/mes
                     </span>
