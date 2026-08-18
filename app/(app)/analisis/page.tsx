@@ -47,6 +47,7 @@ export default async function AnalisisPage({
     { data: funRows },
     { data: cardExpenses },
     { data: projectRows },
+    { data: creditRows },
   ] = await Promise.all([
     supabase.from('income_config').select('amount').eq('owner_id', userId).order('valid_from', { ascending: false }).limit(1).single() as Promise<{ data: IncomeConfig | null }>,
     // is_active: un fijo pausado o dado de baja no es un compromiso vigente y
@@ -56,6 +57,7 @@ export default async function AnalisisPage({
     supabase.from('fun_expenses').select('amount, expense_date').gte('expense_date', windowStart).lt('expense_date', windowEndExcl) as Promise<{ data: { amount: number }[] | null }>,
     supabase.from('card_expenses').select('concept, expense_type, months, category, source, card_expense_installments(amount, due_period_date, is_paid, paid_at)').eq('owner_id', userId).eq('expense_type', 'compra') as Promise<{ data: any[] | null }>,
     supabase.from('project_payments').select('amount, paid_at').eq('owner_id', userId).gte('paid_at', windowStart).lt('paid_at', windowEndExcl) as Promise<{ data: { amount: number }[] | null }>,
+    supabase.from('credits_split').select('*').eq('is_active', true) as unknown as Promise<{ data: any[] | null }>,
   ])
 
   const monthlyIncome = currentIncome?.amount ?? 0
@@ -112,8 +114,24 @@ export default async function AnalisisPage({
   // Ahorro: promedio mensual de abonos a proyectos en el rango
   const ahorroMonthly = Math.round(((projectRows ?? []).reduce((s, p) => s + p.amount, 0) / monthsCount) * 100) / 100
 
+  // Créditos: la cuota ya es mensual, así que NO pasa por monthlyEquivalent.
+  // Se cuenta mi parte, con la parte del otro aparte cuando yo desembolso.
+  const creditItems = (creditRows ?? []).map((c: any) => {
+    const mine      = Number(isLalo ? c.lalo_payment : c.ale_payment)
+    const other     = Number(isLalo ? c.ale_payment  : c.lalo_payment)
+    const iDisburse = c.ownership === 'shared' && c.paid_by === myOwnership
+    return {
+      concept: c.name,
+      monthly: mine,
+      sharedTotal:       iDisburse ? Number(c.monthly_payment) : null,
+      sharedOtherAmount: iDisburse ? other : null,
+    }
+  })
+  const creditsMonthly = Math.round(creditItems.reduce((s, i) => s + i.monthly, 0) * 100) / 100
+
   const analysis = analyzeFinances({
     monthlyIncome, fijos, variables, diversionMonthly, ahorroMonthly, msiMonthly, msiItems,
+    creditsMonthly, creditItems,
   })
 
   const sevStyles: Record<string, string> = {

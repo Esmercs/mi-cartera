@@ -112,6 +112,9 @@ export interface AnalysisInput {
   // Obligaciones: carga mensual actual de compras a meses (MSI)
   msiMonthly: number
   msiItems: AnalysisItem[]
+  // Cuota mensual de créditos y préstamos (mi parte), con un item por crédito
+  creditsMonthly: number
+  creditItems: AnalysisItem[]
 }
 
 export type BucketStatus = 'ok' | 'warn' | 'over'
@@ -151,7 +154,7 @@ export interface Recommendation {
 export interface AnalysisResult {
   groups: GroupResult[]
   recommendations: Recommendation[]
-  committedMonthly: number     // necesidades + deseos + MSI
+  committedMonthly: number     // necesidades + deseos + MSI + créditos
   committedPct: number
   freeMonthly: number
   // Total mensual a recabar del otro por los compartidos que yo desembolso
@@ -181,6 +184,8 @@ export function analyzeFinances(input: AnalysisInput): AnalysisResult {
       rows = [
         infoRow('msi', 'Pagos a MSI (deudas)', input.msiMonthly, input.msiItems,
           'Carga mensual de tus compras a meses.'),
+        infoRow('creditos', 'Créditos y préstamos', input.creditsMonthly, input.creditItems,
+          'Cuota fija mensual de tus créditos. Abonar de más acorta el plazo, no baja la cuota.'),
         infoRow('ahorro', 'Ahorro y proyectos', input.ahorroMonthly,
           input.ahorroMonthly > 0 ? [{ concept: 'Abonos a proyectos (prom. 3 meses)', monthly: input.ahorroMonthly }] : [],
           'Promedio mensual de tus abonos a metas.'),
@@ -277,7 +282,7 @@ export function analyzeFinances(input: AnalysisInput): AnalysisResult {
     })
   }
 
-  const committedMonthly = r2(nec.monthly + des.monthly + input.msiMonthly)
+  const committedMonthly = r2(nec.monthly + des.monthly + input.msiMonthly + input.creditsMonthly)
   const committedPct = pctOf(committedMonthly)
   if (committedPct > 90) {
     recommendations.push({
