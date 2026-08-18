@@ -227,3 +227,45 @@ export interface InterPersonDebt {
   debtor?: Profile
   creditor?: Profile
 }
+
+// ── Créditos y préstamos ──
+
+export type CreditKind = 'disbursement' | 'interest' | 'payment'
+
+export interface Credit {
+  id: string
+  owner_id: string | null
+  ownership: Ownership
+  paid_by: PaidBy
+  name: string
+  principal: number
+  annual_rate: number      // % anual simple, sin IVA
+  term_months: number
+  monthly_payment: number  // cuota fija; un abono extra NO la mueve
+  payment_day: 15 | 30
+  started_at: string
+  is_active: boolean
+  notes: string | null
+  created_at: string
+}
+
+// Vista credits_split: agrega el saldo derivado y el split vigente
+export interface CreditSplit extends Credit {
+  balance: number
+  lalo_payment: number
+  ale_payment: number
+  lalo_balance: number
+  ale_balance: number
+}
+
+export interface CreditMovement {
+  id: string
+  credit_id: string
+  kind: CreditKind
+  amount: number           // siempre positivo; `kind` da la dirección
+  effective_date: string
+  accrual_month: string | null
+  created_by: string | null
+  notes: string | null
+  created_at: string
+}
