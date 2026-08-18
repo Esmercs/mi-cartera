@@ -82,7 +82,10 @@ export default function EditCreditButton({ credit }: { credit: CreditSplit }) {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="label">Tasa anual %</label>
+                  <label className="label">
+                    Tasa anual %
+                    <span className="text-gray-400 font-normal ml-1">antes de IVA</span>
+                  </label>
                   <input className="input" type="number" step="0.001" min="0" value={form.annual_rate}
                     onChange={e => set('annual_rate', e.target.value)} required />
                 </div>

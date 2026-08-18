@@ -120,7 +120,10 @@ export default function AddCreditForm() {
                     onChange={e => set('principal', e.target.value)} placeholder="0.00" required />
                 </div>
                 <div>
-                  <label className="label">Tasa anual %</label>
+                  <label className="label">
+                    Tasa anual %
+                    <span className="text-gray-400 font-normal ml-1">antes de IVA</span>
+                  </label>
                   <input className="input" type="number" step="0.001" min="0" value={form.annual_rate}
                     onChange={e => set('annual_rate', e.target.value)} placeholder="18" required />
                 </div>
@@ -151,8 +154,9 @@ export default function AddCreditForm() {
                   onChange={e => set('monthly_payment', e.target.value)}
                   placeholder={suggested > 0 ? suggested.toFixed(2) : '0.00'} />
                 <p className="text-[10px] text-gray-400 mt-1">
-                  Déjala vacía para usar la calculada. Si tu cuota real es distinta, escríbela — esa manda.
-                  No cambia nunca: si abonas de más, se acorta el plazo.
+                  La calculada ya incluye el IVA del 16% sobre el interés. Déjala vacía para usarla;
+                  si tu cuota real es distinta, escríbela — esa manda. No cambia nunca: si abonas
+                  de más, se acorta el plazo.
                 </p>
               </div>
               <div>

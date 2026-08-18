@@ -2,14 +2,21 @@
 // sistema, sin efectos. Todo lo que decide dinero vive aquí para poder verificarlo
 // aislado con scripts/verify-credit-math.mjs.
 //
-// Sin IVA sobre el interés: son préstamos personales, no tarjetas de crédito
-// (las tarjetas mexicanas sí lo cobran — ver la nota de extensión en el spec).
+// El IVA (16%) se cobra sobre el interés, así que va dentro de la tasa mensual:
+// por eso la mensualidad que cobra el banco ya lo trae incluido. Captura la tasa
+// ANUAL ANTES de IVA (la que te dice el banco) — el 1.16 lo pone esta función.
+//
+// Con tasa 0 el IVA también es 0, así que un crédito sin intereses («12 meses sin
+// intereses») no necesita nada especial. Si algún día aparece un préstamo con
+// interés pero exento de IVA, eso sí requiere una columna `applies_iva` por crédito.
+
+const IVA = 1.16
 
 const r2 = (n: number) => Math.round(n * 100) / 100
 
-/** Tasa mensual a partir de la anual en porcentaje. 24 → 0.02 */
+/** Tasa mensual efectiva, IVA incluido. 24% anual → 0.0232 */
 export function monthlyRate(annualRate: number): number {
-  return annualRate / 100 / 12
+  return (annualRate / 100 / 12) * IVA
 }
 
 /** Interés que devenga un saldo en un mes, a centavos. */
