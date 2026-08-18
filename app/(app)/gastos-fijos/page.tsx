@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
-import { intervalLabel, formatMXDate, isOverdue, getCurrentPeriodDates, getOffsetPeriodDates } from '@/lib/utils/date-utils'
+import { intervalLabel, formatMXDate, formatShortDate, isOverdue, getCurrentPeriodDates, getOffsetPeriodDates } from '@/lib/utils/date-utils'
 import { format } from 'date-fns'
 import Link from 'next/link'
 import type { RecurringExpenseSplit } from '@/types/database'
@@ -416,7 +416,10 @@ function ExpenseTable({
             <div className="min-w-0 flex-1 mr-2">
               <p className="text-sm font-medium text-gray-800 truncate">{e.concept}</p>
               <p className="text-xs text-gray-400">
-                {intervalLabel(e.interval_type)} · {e.payment_day === 0 ? '15 y 30' : e.payment_day ? `Día ${e.payment_day}` : '—'}
+                {intervalLabel(e.interval_type)} ·{' '}
+                <span className={scheduleStale(e) ? 'text-amber-600 font-medium' : ''}>
+                  {scheduleLabel(e)}
+                </span>
                 {e.card_id && cardMap.get(e.card_id) && (
                   <span className="ml-1 text-brand-600">· {cardMap.get(e.card_id)}</span>
                 )}
@@ -500,7 +503,7 @@ function ExpenseTable({
                 </>
               )}
               <th className="pb-2 font-medium">Intervalo</th>
-              <th className="pb-2 font-medium">Día de pago</th>
+              <th className="pb-2 font-medium">Día / próximo pago</th>
               {showSplit && <th className="pb-2 font-medium">Paga</th>}
               <th className="pb-2 font-medium">Tarjeta</th>
               <th className="pb-2"></th>
@@ -531,8 +534,13 @@ function ExpenseTable({
                     </span>
                   )}
                 </td>
-                <td className="py-2.5 text-gray-500">
-                  {e.payment_day === 0 ? '15 y 30' : e.payment_day ? `Día ${e.payment_day}` : '—'}
+                <td className={`py-2.5 ${scheduleStale(e) ? 'text-amber-600' : 'text-gray-500'}`}>
+                  {scheduleLabel(e)}
+                  {scheduleStale(e) && (
+                    <span className="block text-[10px]" title="El Dashboard busca estos gastos por su próximo pago; sin fecha vigente no los lista">
+                      sin fecha vigente
+                    </span>
+                  )}
                 </td>
                 {showSplit && (
                   <td className="py-2.5 text-xs">
@@ -555,6 +563,7 @@ function ExpenseTable({
                       totalAmount={e.total_amount}
                       intervalType={e.interval_type}
                       paymentDay={e.payment_day ?? 15}
+                      nextPaymentDate={e.next_payment_date}
                       cardId={e.card_id}
                       ownership={e.ownership}
                       paidBy={e.paid_by}
@@ -603,6 +612,25 @@ function ExpenseTable({
       </div>
     </>
   )
+}
+
+// Intervalos agendados por fecha: el Dashboard los busca por next_payment_date,
+// no por payment_day — en la lista manda esa fecha, no el «Día 15» que quedó guardado.
+const DATE_BASED = ['bimestral', 'trimestral', 'anual', 'c/15 dias', 'c/21 dias']
+
+// Cuándo toca pagarlo, con el mismo criterio que usa el Dashboard para listarlo
+function scheduleLabel(e: RecurringExpenseSplit): string {
+  if (DATE_BASED.includes(e.interval_type)) {
+    return e.next_payment_date ? formatShortDate(e.next_payment_date) : 'sin fecha'
+  }
+  return e.payment_day === 0 ? '15 y 30' : e.payment_day ? `Día ${e.payment_day}` : '—'
+}
+
+// Un gasto de fecha sin próximo pago (o con la fecha ya pasada) no entra en la
+// ventana que consulta el Dashboard: desaparece de la quincena sin avisar.
+function scheduleStale(e: RecurringExpenseSplit): boolean {
+  return DATE_BASED.includes(e.interval_type)
+    && (!e.next_payment_date || isOverdue(e.next_payment_date))
 }
 
 // Marca la parte del otro en un compartido que yo desembolso completo

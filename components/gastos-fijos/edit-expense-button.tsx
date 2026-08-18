@@ -89,7 +89,7 @@ export default function EditExpenseButton({
     setLoading(true)
     setError(null)
     const { data: { user } } = await supabase.auth.getUser()
-    const { error: updateError } = await supabase
+    const { data: updated, error: updateError } = await supabase
       .from('recurring_expenses')
       .update({
         concept: form.concept,
@@ -105,9 +105,16 @@ export default function EditExpenseButton({
         category: form.category,
       })
       .eq('id', id)
+      .select('id')
     setLoading(false)
     if (updateError) {
       setError(updateError.message)
+      return
+    }
+    // RLS no lanza error: filtra la fila y el update afecta 0 renglones. Sin este
+    // guard el diálogo se cerraba «guardado» y nada había cambiado.
+    if (!updated?.length) {
+      setError('No se guardó: la base de datos rechazó el cambio (permisos). Nada se modificó.')
       return
     }
     setOpen(false)
