@@ -5,7 +5,7 @@ import { formatMXN } from '@/lib/utils/currency'
 import { formatMXDate, getCurrentPeriodDates, paydayForPeriodEnd } from '@/lib/utils/date-utils'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
-import type { Card, CardExpense, CardExpenseInstallment } from '@/types/database'
+import type { Card, CardExpense, CardExpenseInstallment, CreditSplit, CreditMovement } from '@/types/database'
 import AddExpenseForm from '@/components/tarjetas/add-expense-form'
 import AddCardForm from '@/components/tarjetas/add-card-form'
 import DeleteCardButton from '@/components/tarjetas/delete-card-button'
@@ -14,6 +14,7 @@ import CardExpensesGroup, { type ExpenseRow } from '@/components/tarjetas/card-e
 import { materializeCardCharges } from '@/lib/utils/materialize-charges'
 import { accrueCreditInterest } from '@/lib/utils/accrue-credit-interest'
 import PayInstallmentButton from '@/components/tarjetas/pay-installment-button'
+import CreditsSection from '@/components/tarjetas/credits-section'
 
 export default async function TarjetasPage() {
   const supabase = createServerClient()
@@ -34,7 +35,10 @@ export default async function TarjetasPage() {
   // Devengar el interés mensual pendiente de los créditos (perezoso, idempotente)
   await accrueCreditInterest(supabase as any)
 
-  const [{ data: cards }, { data: expenses }, { data: cardDebts }] = await Promise.all([
+  const [
+    { data: cards }, { data: expenses }, { data: cardDebts },
+    { data: credits }, { data: creditMovements },
+  ] = await Promise.all([
     supabase.from('cards').select('*')
       .in('ownership', [ownership, 'shared'])
       .eq('is_active', true)
@@ -49,6 +53,11 @@ export default async function TarjetasPage() {
       .eq('creditor_id', userId)
       .eq('is_paid', false)
       .not('card_id', 'is', null) as unknown as Promise<{ data: any[] | null }>,
+    supabase.from('credits_split').select('*')
+      .eq('is_active', true)
+      .order('name') as unknown as Promise<{ data: CreditSplit[] | null }>,
+    supabase.from('credit_movements').select('*')
+      .order('effective_date', { ascending: false }) as unknown as Promise<{ data: CreditMovement[] | null }>,
   ])
 
   const todayStr = format(new Date(), 'yyyy-MM-dd')
@@ -59,6 +68,11 @@ export default async function TarjetasPage() {
   const currentLabel = currentPayday
     ? format(parseISO(currentPayday), "d 'de' MMMM", { locale: es })
     : ''
+
+  // Periodo de la quincena en curso: ahí se anclan los period_payments de los abonos
+  const { data: currentPeriod } = await supabase
+    .from('periods').select('id')
+    .eq('owner_id', userId).eq('period_date', currentPeriodStr).single()
 
   // ── Armar filas por gasto con datos derivados ──
   type FullRow = ExpenseRow & {
@@ -159,6 +173,13 @@ export default async function TarjetasPage() {
   const totalLimit = groups.reduce((s, g) => s + (g.card?.card_type === 'credit' ? g.card.credit_limit : 0), 0)
   const totalUsedPct = totalLimit > 0 ? Math.round((totalDebt / totalLimit) * 100) : null
 
+  // El saldo de créditos NO entra a totalUsedPct: un préstamo no tiene línea de
+  // crédito, y meterlo inflaría el "% del crédito disponible".
+  const creditsBalance = Math.round(
+    (credits ?? []).reduce((s, c) => s + Number(c.balance), 0) * 100
+  ) / 100
+  const totalOwed = Math.round((totalDebt + creditsBalance) * 100) / 100
+
   // ── Proyección: cuotas que vencen la próxima quincena + vencidas ──
   const allUnpaid = active.flatMap(r =>
     r.nextInstallment && r.expenseType === 'compra'
@@ -184,7 +205,7 @@ export default async function TarjetasPage() {
 
       {/* Header — mobile */}
       <div className="flex items-center justify-between md:hidden">
-        <p className="text-xs text-gray-400">Deuda total: {formatMXN(totalDebt)}</p>
+        <p className="text-xs text-gray-400">Deuda total: {formatMXN(totalOwed)}</p>
         <AddExpenseForm />
       </div>
 
@@ -193,9 +214,14 @@ export default async function TarjetasPage() {
         <div className="grid grid-cols-2 divide-x divide-gray-100">
           <div className="p-4">
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Deuda total</p>
-            <p className={`text-2xl font-bold mt-1 ${totalDebt > 0 ? 'text-red-600' : 'text-gray-800'}`}>
-              {formatMXN(totalDebt)}
+            <p className={`text-2xl font-bold mt-1 ${totalOwed > 0 ? 'text-red-600' : 'text-gray-800'}`}>
+              {formatMXN(totalOwed)}
             </p>
+            {creditsBalance > 0 && (
+              <p className="text-xs text-gray-400 mt-0.5">
+                tarjetas {formatMXN(totalDebt)} · créditos {formatMXN(creditsBalance)}
+              </p>
+            )}
             {totalUsedPct !== null && (
               <p className="text-xs text-gray-400 mt-1">{totalUsedPct}% del crédito disponible</p>
             )}
@@ -281,6 +307,15 @@ export default async function TarjetasPage() {
           />
         )}
       </section>
+
+      {/* ── Créditos y préstamos ── */}
+      <CreditsSection
+        credits={credits ?? []}
+        movements={creditMovements ?? []}
+        isLalo={isLalo}
+        otherName={partnerName}
+        periodId={(currentPeriod as any)?.id ?? ''}
+      />
 
       {/* ── Historial (pagados por completo) ── */}
       {history.length > 0 && (
