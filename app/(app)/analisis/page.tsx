@@ -22,6 +22,7 @@ export default async function AnalisisPage({
     .from('profiles').select('display_name').eq('id', userId).single()
   const isLalo = (profile as any)?.display_name?.toLowerCase() === 'lalo'
   const myOwnership = isLalo ? 'lalo' : 'ale'
+  const otherName   = isLalo ? 'Ale' : 'Lalo'
 
   // ── Rango seleccionado → lista de meses (yyyy-MM) que cubre ──
   const range = searchParams.r ?? '3m'
@@ -63,10 +64,16 @@ export default async function AnalisisPage({
     const myPart = e.ownership === 'shared'
       ? (isLalo ? e.lalo_amount : e.ale_amount)
       : e.total_amount
+    // Sólo cuando yo desembolso el compartido completo hay algo que recabar: si lo
+    // paga el otro, mi parte es lo que le debo y no pasa por mi bolsa.
+    const iDisburse = e.ownership === 'shared' && (e as any).paid_by === myOwnership
+    const otherPart = isLalo ? e.ale_amount : e.lalo_amount
     return {
       concept: e.concept,
       monthly: monthlyEquivalent(myPart, e.interval_type),
       category: (e as any).category ?? 'otros',
+      sharedTotal:       iDisburse ? monthlyEquivalent(e.total_amount, e.interval_type) : null,
+      sharedOtherAmount: iDisburse ? monthlyEquivalent(otherPart, e.interval_type) : null,
     }
   })
 
@@ -150,6 +157,22 @@ export default async function AnalisisPage({
             </p>
           </div>
         </div>
+        {analysis.sharedOtherMonthly > 0 && (
+          <div className="px-4 py-2.5 border-t border-gray-50 space-y-1">
+            <div className="flex justify-between text-xs text-gray-400">
+              <span>Desembolso mensual completo</span>
+              <span>{formatMXN(analysis.committedMonthly + analysis.sharedOtherMonthly)}</span>
+            </div>
+            <div className="flex justify-between text-xs font-semibold text-green-700">
+              <span>A recibir de {otherName}</span>
+              <span>{formatMXN(analysis.sharedOtherMonthly)}</span>
+            </div>
+            <p className="text-[10px] text-gray-300">
+              Los porcentajes se calculan sobre tu parte; esto es lo que sale de tu bolsa
+              de más cada mes y {otherName} te reembolsa.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Recomendaciones */}
@@ -202,11 +225,16 @@ export default async function AnalisisPage({
               <div className={`h-full rounded-full ${groupColor}`} style={{ width: `${Math.min(g.pct, 100)}%` }} />
               <div className="absolute top-0 bottom-0 w-0.5 bg-gray-400/60" style={{ left: `${g.cap}%` }} />
             </div>
+            {g.sharedOtherMonthly > 0 && (
+              <p className="text-[10px] text-green-600 pb-0.5">
+                + {formatMXN(g.sharedOtherMonthly)}/mes que aporta {otherName} en los gastos compartidos
+              </p>
+            )}
             <p className="text-[10px] text-gray-300 pb-1">{g.why}</p>
             {g.rows.length === 0 ? (
               <p className="text-xs text-gray-400">Sin movimientos en este bloque.</p>
             ) : (
-              g.rows.map(row => <CategoryBucketRow key={row.key} bucket={row} informational />)
+              g.rows.map(row => <CategoryBucketRow key={row.key} bucket={row} informational otherName={otherName} />)
             )}
           </section>
         )
@@ -228,6 +256,8 @@ export default async function AnalisisPage({
         ahorro y pago de deudas. Compras, diversión, MSI y ahorro son el promedio mensual
         del rango seleccionado; los gastos fijos son tus compromisos vigentes y el ingreso
         es el actual. Las compras a meses cuentan como deudas, no como gasto del bloque.
+        En los gastos compartidos siempre se cuenta tu parte: cuando tú desembolsas el
+        total, la parte de {otherName} se muestra aparte como monto a recabar.
       </p>
     </div>
   )

@@ -13,9 +13,11 @@ const STATUS_COLORS = {
 export default function CategoryBucketRow({
   bucket,
   informational = false,
+  otherName = 'el otro',
 }: {
   bucket: BucketResult
   informational?: boolean
+  otherName?: string
 }) {
   const [open, setOpen] = useState(false)
   const colors = STATUS_COLORS[bucket.status]
@@ -44,6 +46,11 @@ export default function CategoryBucketRow({
               <span className="text-gray-400"> / {bucket.floor ? 'mín' : 'máx'} {bucket.cap}%</span>
             )}
             <span className="text-gray-500 font-medium ml-2">{formatMXN(bucket.monthly)}/mes</span>
+            {bucket.sharedOtherMonthly > 0 && (
+              <span className="text-green-600 font-medium ml-1">
+                + {formatMXN(bucket.sharedOtherMonthly)} {otherName}
+              </span>
+            )}
           </span>
         </div>
         <div className="h-2 bg-gray-100 rounded-full overflow-hidden mt-1.5 relative">
@@ -64,8 +71,16 @@ export default function CategoryBucketRow({
             <p className="text-xs text-gray-400">Sin gastos en esta categoría.</p>
           ) : (
             bucket.items.map((item, i) => (
-              <div key={i} className="flex justify-between text-xs text-gray-500">
-                <span className="truncate mr-2">{item.concept}</span>
+              <div key={i} className="flex justify-between text-xs text-gray-500 gap-2">
+                <div className="min-w-0">
+                  <p className="truncate">{item.concept}</p>
+                  {item.sharedTotal != null && (
+                    <p className="text-[10px] text-gray-400">
+                      Total {formatMXN(item.sharedTotal)}/mes · {otherName} aporta{' '}
+                      <span className="text-green-600 font-medium">{formatMXN(item.sharedOtherAmount ?? 0)}</span>
+                    </p>
+                  )}
+                </div>
                 <span className="shrink-0">{formatMXN(item.monthly)}/mes</span>
               </div>
             ))

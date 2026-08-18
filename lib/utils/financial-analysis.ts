@@ -65,14 +65,31 @@ export const AHORRO_FLOOR = 10
 
 // ── Motor de análisis ────────────────────────────────────────────────────────
 
-export interface AnalysisItem { concept: string; monthly: number }
+export interface AnalysisItem {
+  concept: string
+  monthly: number
+  // Gastos compartidos que yo desembolso completo: `monthly` es sólo mi parte y
+  // estos exponen el desembolso total y lo que hay que recabar del otro.
+  sharedTotal?: number | null
+  sharedOtherAmount?: number | null
+}
+
+// Gasto mensualizado ya reducido a mi parte, con su categoría. En los compartidos
+// que yo desembolso completo, `sharedOtherAmount` es lo que hay que recabar del otro.
+export interface SpendEntry {
+  concept: string
+  monthly: number
+  category: string
+  sharedTotal?: number | null
+  sharedOtherAmount?: number | null
+}
 
 export interface AnalysisInput {
   monthlyIncome: number
   // Gastos fijos mensualizados (mi parte), con su categoría
-  fijos: { concept: string; monthly: number; category: string }[]
+  fijos: SpendEntry[]
   // Compras de tarjeta a UNA exhibición: promedio mensual de cuotas (últimos 3 meses)
-  variables: { concept: string; monthly: number; category: string }[]
+  variables: SpendEntry[]
   diversionMonthly: number     // promedio mensual real del módulo (mi parte)
   ahorroMonthly: number        // promedio mensual de abonos a proyectos
   // Obligaciones: carga mensual actual de compras a meses (MSI)
@@ -92,6 +109,8 @@ export interface BucketResult {
   status: BucketStatus
   why: string
   items: AnalysisItem[]
+  // Parte del otro en los compartidos de esta categoría (lo que hay que recabar)
+  sharedOtherMonthly: number
 }
 
 export interface GroupResult {
@@ -103,6 +122,7 @@ export interface GroupResult {
   status: BucketStatus
   why: string
   rows: BucketResult[]   // desglose por categoría (informativo, sin tope propio)
+  sharedOtherMonthly: number
 }
 
 export interface Recommendation {
@@ -117,6 +137,8 @@ export interface AnalysisResult {
   committedMonthly: number     // necesidades + deseos + MSI
   committedPct: number
   freeMonthly: number
+  // Total mensual a recabar del otro por los compartidos que yo desembolso
+  sharedOtherMonthly: number
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100
@@ -132,6 +154,7 @@ export function analyzeFinances(input: AnalysisInput): AnalysisResult {
   const infoRow = (key: string, label: string, monthly: number, items: AnalysisItem[], why = ''): BucketResult => ({
     key, label, monthly: r2(monthly), pct: pctOf(monthly), cap: 0,
     floor: false, status: 'ok', why, items,
+    sharedOtherMonthly: r2(items.reduce((s, i) => s + (i.sharedOtherAmount ?? 0), 0)),
   })
 
   const groups: GroupResult[] = GROUPS.map(g => {
@@ -156,7 +179,10 @@ export function analyzeFinances(input: AnalysisInput): AnalysisResult {
           if (monthly < 0.01) continue
           rows.push(infoRow(cat, CATEGORY_LABELS[cat], monthly, [
             ...(input.diversionMonthly > 0 ? [{ concept: 'Gasto real del módulo (prom. 3 meses, tu parte)', monthly: input.diversionMonthly }] : []),
-            ...tagged.map(f => ({ concept: `${f.concept} (aporte al presupuesto)`, monthly: f.monthly })),
+            ...tagged.map(f => ({
+              concept: `${f.concept} (aporte al presupuesto)`, monthly: f.monthly,
+              sharedTotal: f.sharedTotal ?? null, sharedOtherAmount: f.sharedOtherAmount ?? null,
+            })),
           ]))
           continue
         }
@@ -164,7 +190,10 @@ export function analyzeFinances(input: AnalysisInput): AnalysisResult {
         if (!mine.length) continue
         rows.push(infoRow(cat, CATEGORY_LABELS[cat],
           mine.reduce((s, f) => s + f.monthly, 0),
-          mine.map(f => ({ concept: f.concept, monthly: f.monthly })).sort((a, b) => b.monthly - a.monthly)))
+          mine.map(f => ({
+            concept: f.concept, monthly: f.monthly,
+            sharedTotal: f.sharedTotal ?? null, sharedOtherAmount: f.sharedOtherAmount ?? null,
+          })).sort((a, b) => b.monthly - a.monthly)))
       }
       rows.sort((a, b) => b.monthly - a.monthly)
     }
@@ -174,6 +203,7 @@ export function analyzeFinances(input: AnalysisInput): AnalysisResult {
     return {
       key: g.key, label: g.label, cap: g.cap, monthly, pct,
       status: capStatus(pct, g.cap), why: g.why, rows,
+      sharedOtherMonthly: r2(rows.reduce((s, r) => s + r.sharedOtherMonthly, 0)),
     }
   })
 
@@ -247,6 +277,7 @@ export function analyzeFinances(input: AnalysisInput): AnalysisResult {
     groups, recommendations,
     committedMonthly, committedPct,
     freeMonthly: r2(income - committedMonthly),
+    sharedOtherMonthly: r2(groups.reduce((s, g) => s + g.sharedOtherMonthly, 0)),
   }
 }
 
