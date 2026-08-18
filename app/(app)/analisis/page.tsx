@@ -57,7 +57,8 @@ export default async function AnalisisPage({
     supabase.from('fun_expenses').select('amount, expense_date').gte('expense_date', windowStart).lt('expense_date', windowEndExcl) as Promise<{ data: { amount: number }[] | null }>,
     supabase.from('card_expenses').select('concept, expense_type, months, category, source, card_expense_installments(amount, due_period_date, is_paid, paid_at)').eq('owner_id', userId).eq('expense_type', 'compra') as Promise<{ data: any[] | null }>,
     supabase.from('project_payments').select('amount, paid_at').eq('owner_id', userId).gte('paid_at', windowStart).lt('paid_at', windowEndExcl) as Promise<{ data: { amount: number }[] | null }>,
-    supabase.from('credits_split').select('*').eq('is_active', true) as unknown as Promise<{ data: any[] | null }>,
+    // ownership: credits_split es una vista y no hereda el RLS de credits
+    supabase.from('credits_split').select('*').in('ownership', [myOwnership, 'shared']).eq('is_active', true) as unknown as Promise<{ data: any[] | null }>,
   ])
 
   const monthlyIncome = currentIncome?.amount ?? 0

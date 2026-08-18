@@ -53,7 +53,11 @@ export default async function TarjetasPage() {
       .eq('creditor_id', userId)
       .eq('is_paid', false)
       .not('card_id', 'is', null) as unknown as Promise<{ data: any[] | null }>,
+    // Filtrar por ownership como la query de cards: credits_split es una VISTA y en
+    // Postgres una vista no hereda el RLS de su tabla base — corre con los privilegios
+    // de su dueño. Sin este filtro, el otro vería tus créditos personales.
     supabase.from('credits_split').select('*')
+      .in('ownership', [ownership, 'shared'])
       .eq('is_active', true)
       .order('name') as unknown as Promise<{ data: CreditSplit[] | null }>,
     supabase.from('credit_movements').select('*')

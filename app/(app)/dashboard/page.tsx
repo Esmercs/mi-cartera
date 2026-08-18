@@ -152,7 +152,9 @@ export default async function DashboardPage({
     supabase.from('recurring_expenses_split').select('id, concept, total_amount, lalo_amount, ale_amount, paid_by, card_id').eq('is_active', true).eq('ownership', 'shared') as Promise<{ data: any[] | null }>,
     (supabase.from('internal_debt_settlements') as any).select('*').eq('period_date', nextPeriodStr) as Promise<{ data: any[] | null }>,
     // Créditos cuyo día de pago cae en el corte de esta quincena
+    // ownership: credits_split es una vista y no hereda el RLS de credits
     supabase.from('credits_split').select('*')
+      .in('ownership', [myOwnership, 'shared'])
       .eq('is_active', true)
       .eq('payment_day', nextPayDay) as unknown as Promise<{ data: any[] | null }>,
   ])
