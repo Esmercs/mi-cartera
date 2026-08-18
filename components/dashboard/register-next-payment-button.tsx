@@ -20,11 +20,13 @@ interface Props {
   recurringExpenseId?: string | null
   intervalType?: IntervalType | null
   currentNextPaymentDate?: string | null
+  // Gasto compartido que yo pago: `amount` es sólo mi parte, esto explica el resto
+  shareNote?: string | null
 }
 
 export default function RegisterNextPaymentButton({
   periodId, concept, amount, cardId, type, installmentId,
-  recurringExpenseId, intervalType, currentNextPaymentDate,
+  recurringExpenseId, intervalType, currentNextPaymentDate, shareNote,
 }: Props) {
   const router = useRouter()
   const supabase = createClient()
@@ -115,6 +117,9 @@ export default function RegisterNextPaymentButton({
             <div>
               <h3 className="font-semibold text-gray-800">Registrar pago</h3>
               <p className="text-xs text-gray-500 mt-0.5 truncate">{concept}</p>
+              {shareNote && (
+                <p className="text-xs text-gray-500 mt-1">{shareNote}</p>
+              )}
               {currentNextPaymentDate && intervalType && (
                 <p className="text-xs text-blue-600 mt-1">
                   Siguiente pago se recorrerá automáticamente
@@ -125,7 +130,9 @@ export default function RegisterNextPaymentButton({
               <div>
                 <label className="label">
                   Monto a pagar
-                  <span className="text-gray-400 font-normal ml-1">(total: {formatMXN(amount)})</span>
+                  <span className="text-gray-400 font-normal ml-1">
+                    ({shareNote ? 'mi parte' : 'total'}: {formatMXN(amount)})
+                  </span>
                 </label>
                 <input
                   className="input"

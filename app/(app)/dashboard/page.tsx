@@ -224,6 +224,10 @@ export default async function DashboardPage({
     debtId: string | null; creditorName: string | null
     totalInstallments: number | null; paidInstallments: number; dueDate: string | null
     recurringExpenseId: string | null; intervalType: string | null; currentNextPaymentDate: string | null
+    // Solo para gastos compartidos sin tarjeta que yo pago completo: `amount` es mi
+    // parte y estos exponen el desembolso total y lo que hay que recabar del otro.
+    sharedTotal?: number | null
+    sharedOtherAmount?: number | null
   }
   const nextItems: NextItem[] = [
     // Cuotas del ledger de tarjetas (una exhibición y MSI) que vencen esta quincena
@@ -246,10 +250,16 @@ export default async function DashboardPage({
       .flatMap(e => {
       const isDateBased = ['bimestral', 'trimestral', 'anual', 'c/15 dias', 'c/21 dias'].includes(e.interval_type)
       const cardName = e.card_id ? (cardNameMap.get(e.card_id) ?? null) : null
-      // Si shared y yo lo pago, debo el total; si shared y cada quien su parte, sólo mi parte
       const sharedFullPayer = e.ownership === 'shared' && e.paid_by === myOwnership
+      const myShare    = isLalo ? e.lalo_amount : e.ale_amount
+      const otherShare = isLalo ? e.ale_amount  : e.lalo_amount
+      // Compartido que yo pago SIN tarjeta: cobro sólo mi parte y dejo visible el
+      // desembolso total + lo que hay que recabar del otro. Con tarjeta seguimos
+      // usando el total: el ledger se movió por el importe completo y descontar
+      // sólo mi parte dejaría deuda fantasma en la tarjeta.
+      const splitMyShareOnly = sharedFullPayer && !e.card_id
       const baseAmount = e.ownership === 'shared'
-        ? (sharedFullPayer ? e.total_amount : (isLalo ? e.lalo_amount : e.ale_amount))
+        ? (sharedFullPayer && !splitMyShareOnly ? e.total_amount : myShare)
         : e.total_amount
       // Descontar lo ya pagado del concepto: pagos parciales dejan visible solo el restante
       const paidAmt = paidAmounts.get(`${e.concept}|${e.card_id ?? ''}`) ?? 0
@@ -268,6 +278,8 @@ export default async function DashboardPage({
         recurringExpenseId: e.id,
         intervalType: isDateBased ? e.interval_type : null,
         currentNextPaymentDate: isDateBased ? (e.next_payment_date ?? null) : null,
+        sharedTotal:       splitMyShareOnly ? e.total_amount : null,
+        sharedOtherAmount: splitMyShareOnly ? otherShare     : null,
       }]
     }),
     ...(nextDebts ?? []).map(d => ({
@@ -297,6 +309,13 @@ export default async function DashboardPage({
     }
   }
   const cardGroups = Array.from(cardGroupMap.values())
+
+  // Sin tarjeta: mi parte (lo que sale de mi bolsa) vs. el desembolso total y lo
+  // que tengo que recabar del otro para completar los gastos compartidos.
+  const round2 = (n: number) => Math.round(n * 100) / 100
+  const noCardMine      = round2(noCardItems.reduce((s, i) => s + i.amount, 0))
+  const noCardToCollect = round2(noCardItems.reduce((s, i) => s + (i.sharedOtherAmount ?? 0), 0))
+  const noCardFull      = round2(noCardMine + noCardToCollect)
 
 
   // Agrupar pagos registrados: por tarjeta · gastos casa (shared sin tarjeta) · otros
@@ -520,6 +539,12 @@ export default async function DashboardPage({
                         {item.type === 'fijo' ? 'Fijo' : item.type === 'msi' ? 'MSI' :
                          item.type === 'deuda' ? `→ ${item.creditorName ?? 'deuda'}` : 'Programado'}
                       </span>
+                      {item.sharedTotal != null && (
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          Total {formatMXN(item.sharedTotal)} · {otherName} aporta{' '}
+                          <span className="text-green-600 font-medium">{formatMXN(item.sharedOtherAmount ?? 0)}</span>
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-sm font-semibold text-gray-800">{formatMXN(item.amount)}</span>
@@ -539,15 +564,32 @@ export default async function DashboardPage({
                           recurringExpenseId={item.recurringExpenseId}
                           intervalType={item.intervalType as any}
                           currentNextPaymentDate={item.currentNextPaymentDate}
+                          shareNote={item.sharedTotal != null
+                            ? `Total ${formatMXN(item.sharedTotal)} · ${otherName} aporta ${formatMXN(item.sharedOtherAmount ?? 0)}`
+                            : null}
                         />
                       )}
                     </div>
                   </div>
                 ))}
               </div>
-              <div className="pt-2 border-t border-gray-100 flex justify-between text-xs font-semibold text-gray-500 mt-1">
-                <span>Subtotal sin tarjeta</span>
-                <span>{formatMXN(noCardItems.reduce((s, i) => s + i.amount, 0))}</span>
+              <div className="pt-2 border-t border-gray-100 mt-1 space-y-1">
+                <div className="flex justify-between text-xs font-semibold text-gray-500">
+                  <span>Subtotal sin tarjeta{noCardToCollect > 0 ? ' (mi parte)' : ''}</span>
+                  <span>{formatMXN(noCardMine)}</span>
+                </div>
+                {noCardToCollect > 0 && (
+                  <>
+                    <div className="flex justify-between text-xs text-gray-400">
+                      <span>Total a cubrir</span>
+                      <span>{formatMXN(noCardFull)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs font-semibold text-green-700">
+                      <span>A recibir de {otherName}</span>
+                      <span>{formatMXN(noCardToCollect)}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
