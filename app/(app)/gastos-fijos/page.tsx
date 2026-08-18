@@ -6,6 +6,7 @@ import { intervalLabel, formatMXDate, isOverdue, getCurrentPeriodDates, getOffse
 import { format } from 'date-fns'
 import Link from 'next/link'
 import type { RecurringExpenseSplit } from '@/types/database'
+import { monthlyEquivalent } from '@/lib/utils/financial-analysis'
 import AddExpenseForm from '@/components/gastos-fijos/add-expense-form'
 import DeleteExpenseButton from '@/components/gastos-fijos/delete-expense-button'
 import EditExpenseButton from '@/components/gastos-fijos/edit-expense-button'
@@ -78,22 +79,28 @@ export default async function GastosFijosPage() {
   // Yo desembolso el compartido completo → la parte del otro es a recabar
   const iDisburse = (e: RecurringExpenseSplit) => e.paid_by === myOwnership
 
-  const mySharedTotal   = round2(shared.reduce((s, e) => s + myPart(e), 0))
-  const personalTotal   = round2(personal.reduce((s, e) => s + e.total_amount, 0))
-  const sharedTotal     = round2(shared.reduce((s, e) => s + e.total_amount, 0))
+  // Todo total de esta página es mensualizado: sumar montos en crudo con
+  // intervalos distintos no significa nada (una quincenal pesa el doble que su
+  // monto, una bimestral la mitad). Coincide con la sección de Análisis.
+  const perMonth = (e: RecurringExpenseSplit, amount: number) =>
+    monthlyEquivalent(amount, e.interval_type)
+
+  const mySharedTotal   = round2(shared.reduce((s, e) => s + perMonth(e, myPart(e)), 0))
+  const personalTotal   = round2(personal.reduce((s, e) => s + perMonth(e, e.total_amount), 0))
+  const sharedTotal     = round2(shared.reduce((s, e) => s + perMonth(e, e.total_amount), 0))
   // Lo que pongo de más en los compartidos que yo pago y el otro me repone
-  const toCollectTotal  = round2(shared.filter(iDisburse).reduce((s, e) => s + otherPart(e), 0))
+  const toCollectTotal  = round2(shared.filter(iDisburse).reduce((s, e) => s + perMonth(e, otherPart(e)), 0))
   // Mi parte de los compartidos que paga el otro: eso se lo repongo yo
   const toRepayTotal    = round2(
     shared.filter(e => !iDisburse(e) && e.paid_by && e.paid_by !== 'each')
-          .reduce((s, e) => s + myPart(e), 0)
+          .reduce((s, e) => s + perMonth(e, myPart(e)), 0)
   )
   // Efectivo que sale por mis manos: mis personales + el cargo completo de los
   // compartidos que yo pago + mi parte en los de «cada quien»
   const myOutlay = round2(
     personalTotal
-    + shared.filter(iDisburse).reduce((s, e) => s + e.total_amount, 0)
-    + shared.filter(e => !e.paid_by || e.paid_by === 'each').reduce((s, e) => s + myPart(e), 0)
+    + shared.filter(iDisburse).reduce((s, e) => s + perMonth(e, e.total_amount), 0)
+    + shared.filter(e => !e.paid_by || e.paid_by === 'each').reduce((s, e) => s + perMonth(e, myPart(e)), 0)
   )
 
   return (
@@ -384,11 +391,17 @@ function ExpenseTable({
   // El importe que pesa sobre mí siempre es mi parte; en personales es el total
   const rowMine   = (e: RecurringExpenseSplit) => showSplit ? myPart(e) : e.total_amount
 
-  const sumTotal   = round2(expenses.reduce((s, e) => s + e.total_amount, 0))
-  const sumMine    = round2(expenses.reduce((s, e) => s + rowMine(e), 0))
-  const sumLalo    = round2(expenses.reduce((s, e) => s + e.lalo_amount, 0))
-  const sumAle     = round2(expenses.reduce((s, e) => s + e.ale_amount, 0))
-  const sumCollect = round2(expenses.filter(iDisburse).reduce((s, e) => s + otherPart(e), 0))
+  // Los totales son mensualizados; las filas siguen mostrando el cargo real de
+  // cada cobro, así que una fila quincenal pesa el doble en el total.
+  const perMonth   = (e: RecurringExpenseSplit, amount: number) =>
+    monthlyEquivalent(amount, e.interval_type)
+  const isMonthly  = (e: RecurringExpenseSplit) => e.interval_type === 'mensual'
+
+  const sumTotal   = round2(expenses.reduce((s, e) => s + perMonth(e, e.total_amount), 0))
+  const sumMine    = round2(expenses.reduce((s, e) => s + perMonth(e, rowMine(e)), 0))
+  const sumLalo    = round2(expenses.reduce((s, e) => s + perMonth(e, e.lalo_amount), 0))
+  const sumAle     = round2(expenses.reduce((s, e) => s + perMonth(e, e.ale_amount), 0))
+  const sumCollect = round2(expenses.filter(iDisburse).reduce((s, e) => s + perMonth(e, otherPart(e)), 0))
 
   return (
     <>
@@ -420,6 +433,11 @@ function ExpenseTable({
                   )}
                 </p>
               )}
+              {!isMonthly(e) && (
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  ≡ {formatMXN(perMonth(e, rowMine(e)))}/mes de mi parte
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-sm font-semibold text-gray-800">{formatMXN(rowMine(e))}</span>
@@ -440,24 +458,28 @@ function ExpenseTable({
             </div>
           </div>
         ))}
-        {showSplit && (
-          <div className="pt-2 border-t border-gray-100 space-y-1">
-            <div className="flex justify-between text-xs font-semibold text-gray-500">
-              <span>Mi parte</span>
-              <span>{formatMXN(sumMine)}</span>
-            </div>
+        <div className="pt-2 border-t border-gray-100 space-y-1">
+          <div className="flex justify-between text-xs font-semibold text-gray-500">
+            <span>{showSplit ? 'Mi parte' : 'Total'} /mes</span>
+            <span>{formatMXN(sumMine)}</span>
+          </div>
+          {showSplit && (
             <div className="flex justify-between text-xs text-gray-400">
-              <span>Total compartido</span>
+              <span>Total compartido /mes</span>
               <span>{formatMXN(sumTotal)}</span>
             </div>
-            {sumCollect > 0 && (
-              <div className="flex justify-between text-xs font-semibold text-green-700">
-                <span>A recibir de {otherName}</span>
-                <span>{formatMXN(sumCollect)}</span>
-              </div>
-            )}
-          </div>
-        )}
+          )}
+          {sumCollect > 0 && (
+            <div className="flex justify-between text-xs font-semibold text-green-700">
+              <span>A recibir de {otherName} /mes</span>
+              <span>{formatMXN(sumCollect)}</span>
+            </div>
+          )}
+          <p className="text-[10px] text-gray-300">
+            Totales mensualizados: cada gasto se lleva a su equivalente por mes según
+            su intervalo, así que no son la suma directa de los montos de arriba.
+          </p>
+        </div>
       </div>
 
       {/* Desktop: table */}
@@ -497,7 +519,14 @@ function ExpenseTable({
                     </td>
                   </>
                 )}
-                <td className="py-2.5 text-gray-500">{intervalLabel(e.interval_type)}</td>
+                <td className="py-2.5 text-gray-500">
+                  {intervalLabel(e.interval_type)}
+                  {!isMonthly(e) && (
+                    <span className="block text-[10px] text-gray-400">
+                      ≡ {formatMXN(perMonth(e, rowMine(e)))}/mes
+                    </span>
+                  )}
+                </td>
                 <td className="py-2.5 text-gray-500">
                   {e.payment_day === 0 ? '15 y 30' : e.payment_day ? `Día ${e.payment_day}` : '—'}
                 </td>
@@ -534,29 +563,38 @@ function ExpenseTable({
               </tr>
             ))}
           </tbody>
-          {showSplit && (
-            <tfoot>
-              <tr className="border-t-2 border-gray-200 text-xs">
-                <td className="pt-2 font-semibold text-gray-500">Totales</td>
-                <td className="pt-2 text-gray-500">{formatMXN(sumTotal)}</td>
-                <td className={`pt-2 text-lalo ${isLalo ? 'font-bold' : 'font-semibold'}`}>{formatMXN(sumLalo)}</td>
-                <td className={`pt-2 text-ale ${!isLalo ? 'font-bold' : 'font-semibold'}`}>{formatMXN(sumAle)}</td>
-                <td className="pt-2" colSpan={5}>
-                  {sumCollect > 0 && (
-                    <span className="text-green-700 font-semibold">
-                      A recibir de {otherName}: {formatMXN(sumCollect)}
-                    </span>
-                  )}
-                </td>
-              </tr>
-              <tr className="text-xs">
-                <td className="pt-1 text-gray-400" colSpan={9}>
-                  Mi parte: <span className="font-semibold text-gray-600">{formatMXN(sumMine)}</span>
-                  {' '}de {formatMXN(sumTotal)}. «A recibir» es lo que pones tú y {otherName} te repone.
-                </td>
-              </tr>
-            </tfoot>
-          )}
+          <tfoot>
+            <tr className="border-t-2 border-gray-200 text-xs">
+              <td className="pt-2 font-semibold text-gray-500">Totales /mes</td>
+              <td className="pt-2 text-gray-500">{formatMXN(sumTotal)}</td>
+              {showSplit && (
+                <>
+                  <td className={`pt-2 text-lalo ${isLalo ? 'font-bold' : 'font-semibold'}`}>{formatMXN(sumLalo)}</td>
+                  <td className={`pt-2 text-ale ${!isLalo ? 'font-bold' : 'font-semibold'}`}>{formatMXN(sumAle)}</td>
+                </>
+              )}
+              <td className="pt-2" colSpan={showSplit ? 5 : 4}>
+                {sumCollect > 0 && (
+                  <span className="text-green-700 font-semibold">
+                    A recibir de {otherName}: {formatMXN(sumCollect)}
+                  </span>
+                )}
+              </td>
+            </tr>
+            <tr className="text-xs">
+              <td className="pt-1 text-gray-400" colSpan={showSplit ? 9 : 6}>
+                {showSplit && (
+                  <>
+                    Mi parte: <span className="font-semibold text-gray-600">{formatMXN(sumMine)}</span>
+                    {' '}de {formatMXN(sumTotal)}.{' '}
+                  </>
+                )}
+                Totales mensualizados según el intervalo de cada gasto — no son la suma
+                directa de la columna.
+                {sumCollect > 0 && ` «A recibir» es lo que pones tú y ${otherName} te repone.`}
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </>

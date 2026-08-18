@@ -49,7 +49,9 @@ export default async function AnalisisPage({
     { data: projectRows },
   ] = await Promise.all([
     supabase.from('income_config').select('amount').eq('owner_id', userId).order('valid_from', { ascending: false }).limit(1).single() as Promise<{ data: IncomeConfig | null }>,
-    supabase.from('recurring_expenses_split').select('*').in('ownership', [myOwnership, 'shared']) as Promise<{ data: RecurringExpenseSplit[] | null }>,
+    // is_active: un fijo pausado o dado de baja no es un compromiso vigente y
+    // estaba inflando el análisis (Gastos fijos sí lo filtra — los totales no cuadraban)
+    supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.rpc('get_split_percentages').single() as unknown as Promise<{ data: { lalo_pct: number; ale_pct: number } | null }>,
     supabase.from('fun_expenses').select('amount, expense_date').gte('expense_date', windowStart).lt('expense_date', windowEndExcl) as Promise<{ data: { amount: number }[] | null }>,
     supabase.from('card_expenses').select('concept, expense_type, months, category, source, card_expense_installments(amount, due_period_date, is_paid, paid_at)').eq('owner_id', userId).eq('expense_type', 'compra') as Promise<{ data: any[] | null }>,
