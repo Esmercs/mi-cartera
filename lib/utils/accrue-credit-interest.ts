@@ -39,9 +39,13 @@ export async function accrueCreditInterest(supabase: SupabaseClient): Promise<vo
     // Tope de 12: ponerse al corriente sin bucles largos si la app no se abrió en meses
     for (let guard = 0; guard < 12 && month.getTime() <= currentMonth.getTime(); guard++) {
       const monthEndStr = format(endOfMonth(month), 'yyyy-MM-dd')
-      // El saldo AL CIERRE DE ESE MES, no el de hoy: un abono hecho en el mes N ya
-      // bajó el saldo antes de devengar el mes N+1.
-      const interest = accruedInterest(balanceAsOf(rows, monthEndStr), Number(c.annual_rate))
+      // Saldo de APERTURA del mes = cierre del mes anterior. Es la convención estándar
+      // de amortización y la que usa projectPayoff: el interés se devenga sobre lo que
+      // traías, y tu abono de este mes baja el interés del SIGUIENTE, no el de este.
+      // Usar el cierre del propio mes regalaba un mes de interés sobre cada abono y
+      // hacía que la proyección no cuadrara con el ledger.
+      const openingStr = format(endOfMonth(addMonths(month, -1)), 'yyyy-MM-dd')
+      const interest = accruedInterest(balanceAsOf(rows, openingStr), Number(c.annual_rate))
 
       if (interest < 0.01) { month = addMonths(month, 1); continue }
 
