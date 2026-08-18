@@ -87,23 +87,29 @@ ALTER TABLE credit_settlements ENABLE ROW LEVEL SECURITY;
 
 -- Las cuatro operaciones aceptan shared (owner_id NULL). recurring_expenses tiene el
 -- hoyo de exigir owner_id = auth.uid() en INSERT, lo que bloquea crear compartidos.
+DROP POLICY IF EXISTS "credits_select" ON credits;
 CREATE POLICY "credits_select" ON credits FOR SELECT
   USING (is_approved() AND (ownership = 'shared' OR owner_id = auth.uid() OR is_admin()));
 
+DROP POLICY IF EXISTS "credits_insert" ON credits;
 CREATE POLICY "credits_insert" ON credits FOR INSERT
   WITH CHECK (is_approved() AND (ownership = 'shared' OR owner_id = auth.uid() OR is_admin()));
 
+DROP POLICY IF EXISTS "credits_update" ON credits;
 CREATE POLICY "credits_update" ON credits FOR UPDATE
   USING (is_approved() AND (ownership = 'shared' OR owner_id = auth.uid() OR is_admin()));
 
+DROP POLICY IF EXISTS "credits_delete" ON credits;
 CREATE POLICY "credits_delete" ON credits FOR DELETE
   USING (is_approved() AND (ownership = 'shared' OR owner_id = auth.uid() OR is_admin()));
 
+DROP POLICY IF EXISTS "cm_select" ON credit_movements;
 CREATE POLICY "cm_select" ON credit_movements FOR SELECT
   USING (is_approved() AND EXISTS (
     SELECT 1 FROM credits c WHERE c.id = credit_movements.credit_id
       AND (c.ownership = 'shared' OR c.owner_id = auth.uid() OR is_admin())));
 
+DROP POLICY IF EXISTS "cm_insert" ON credit_movements;
 CREATE POLICY "cm_insert" ON credit_movements FOR INSERT
   WITH CHECK (is_approved() AND EXISTS (
     SELECT 1 FROM credits c WHERE c.id = credit_id
@@ -112,19 +118,43 @@ CREATE POLICY "cm_insert" ON credit_movements FOR INSERT
 -- Un abono es de quien lo registró; el interés lo genera el sistema, así que
 -- cualquiera que vea el crédito puede borrarlo — si no, "recalcular intereses"
 -- quedaría roto para el usuario que no devengó ese mes.
+DROP POLICY IF EXISTS "cm_delete" ON credit_movements;
 CREATE POLICY "cm_delete" ON credit_movements FOR DELETE
   USING (is_approved() AND EXISTS (
     SELECT 1 FROM credits c WHERE c.id = credit_movements.credit_id
       AND (c.ownership = 'shared' OR c.owner_id = auth.uid() OR is_admin()))
     AND (kind = 'interest' OR created_by = auth.uid()));
 
+DROP POLICY IF EXISTS "cs_select" ON credit_settlements;
 CREATE POLICY "cs_select" ON credit_settlements FOR SELECT
   USING (is_approved() AND EXISTS (
     SELECT 1 FROM credits c WHERE c.id = credit_settlements.credit_id AND c.ownership = 'shared'));
 
+DROP POLICY IF EXISTS "cs_insert" ON credit_settlements;
 CREATE POLICY "cs_insert" ON credit_settlements FOR INSERT
   WITH CHECK (is_approved() AND paid_by_user_id = auth.uid() AND EXISTS (
     SELECT 1 FROM credits c WHERE c.id = credit_id AND c.ownership = 'shared'));
 
+DROP POLICY IF EXISTS "cs_delete" ON credit_settlements;
 CREATE POLICY "cs_delete" ON credit_settlements FOR DELETE
   USING (is_approved() AND paid_by_user_id = auth.uid());
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Verificación: al correr esto en el SQL Editor, la última consulta te dice si
+-- quedó todo. Deben salir 3 tablas, 1 vista, 2 índices y 10 políticas.
+-- ─────────────────────────────────────────────────────────────────────────────
+SELECT 'tablas'   AS objeto, count(*) AS encontrados, 3  AS esperados
+  FROM information_schema.tables
+ WHERE table_schema = 'public' AND table_name IN ('credits','credit_movements','credit_settlements')
+UNION ALL
+SELECT 'vista', count(*), 1
+  FROM information_schema.views
+ WHERE table_schema = 'public' AND table_name = 'credits_split'
+UNION ALL
+SELECT 'indices', count(*), 2
+  FROM pg_indexes
+ WHERE schemaname = 'public' AND indexname IN ('credit_interest_once','idx_cm_credit')
+UNION ALL
+SELECT 'politicas', count(*), 10
+  FROM pg_policies
+ WHERE schemaname = 'public' AND tablename IN ('credits','credit_movements','credit_settlements');
