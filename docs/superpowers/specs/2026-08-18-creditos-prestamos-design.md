@@ -17,7 +17,7 @@ Hace falta: capturar un crédito, ver el saldo real crecer con su tasa mes con m
 | Decisión | Elección | Por qué |
 |---|---|---|
 | Cálculo de la deuda | Saldo insoluto, el interés capitaliza | Es cómo funciona un crédito real |
-| Tasa | Anual + IVA 16% sobre el interés | Es lo que cobra un banco en México |
+| Tasa | Anual simple, **sin IVA** | Es un préstamo personal, no una tarjeta |
 | Split de compartidos | Porcentaje global vigente (`get_split_percentages`) | Consistente con `recurring_expenses_split` |
 | Quién paga al banco | Configurable por crédito (`paid_by`) | Reutiliza el patrón ya conocido de gastos fijos |
 | Monto en la quincena | Cuota fija amortizada, **nunca cambia** | Un abono extra acorta el plazo, no la cuota |
@@ -138,16 +138,16 @@ Políticas espejo de `recurring_expenses`, **corrigiendo de entrada el hoyo que 
 Funciones puras, sin Supabase, testeables aisladas.
 
 ```ts
-// Tasa mensual efectiva, con IVA sobre el interés
+// Tasa mensual. Sin IVA: es un préstamo personal, no una tarjeta de crédito.
 monthlyRate(annualRate: number): number
-  → (annualRate / 100 / 12) * 1.16
+  → annualRate / 100 / 12
 
 // Cuota fija amortizada. Con tasa 0 cae a principal/plazo (sin división por cero).
 amortizedPayment(principal, annualRate, termMonths): number
   → i === 0 ? principal / n : principal * i / (1 - (1 + i) ** -n)
 
-// Interés devengado de un mes: base + IVA, redondeados por separado
-accruedInterest(balance, annualRate): { base: number; iva: number; total: number }
+// Interés devengado de un mes, redondeado a centavos
+accruedInterest(balance, annualRate): number
 
 // Proyección con la cuota fija: cuántos meses faltan, cuándo se liquida,
 // cuánto interés queda por pagar. Tope de 600 iteraciones.
@@ -157,14 +157,16 @@ projectPayoff(balance, annualRate, monthlyPayment, fromDate)
 
 `amortizedPayment` solo **sugiere** la cuota al crear el crédito; el campo es editable porque los bancos redondean y agregan comisiones. Si tu cuota real es $4,500, esa manda y esa se guarda.
 
-Verificación del comportamiento pedido (principal $100,000, 24% anual + IVA, 24 meses → cuota $5,480.70):
+Verificación del comportamiento pedido (principal $100,000, 24% anual, 24 meses → cuota $5,287.11):
 
 | | Meses | Interés total |
 |---|---|---|
-| Sin abonos extra | 24 | $31,536.80 |
-| Con $20,000 extra en el mes 6 | 19 | $22,780.76 |
+| Sin abonos extra | 24 | $26,890.63 |
+| Con $20,000 extra en el mes 6 | 19 | $19,503.53 (ahorra $7,387.10) |
 
 La cuota no se mueve; se acorta el plazo y baja el interés.
+
+**Extensión si algún día se agrega un crédito de tarjeta:** las tarjetas mexicanas sí cobran IVA sobre el interés. Eso se resuelve con una columna `applies_iva BOOLEAN DEFAULT FALSE` y un multiplicador en `monthlyRate`. Queda fuera de alcance mientras todos los créditos sean préstamos personales — no vale meter una casilla en el formulario para un caso que hoy no existe.
 
 ## Devengo del interés (`lib/utils/accrue-credit-interest.ts`)
 
@@ -175,9 +177,9 @@ para cada crédito activo visible con annual_rate > 0:
   mes ← primer mes sin movimiento 'interest', empezando en el mes siguiente a started_at
   repetir hasta 12 veces, mientras mes <= mes actual:
     saldo ← saldo al último día de ese mes   (solo movimientos con effective_date <= fin de mes)
-    { total } ← accruedInterest(saldo, annual_rate)
-    si total < 0.01: avanzar mes y continuar
-    insertar movimiento kind='interest', amount=total,
+    interes ← accruedInterest(saldo, annual_rate)
+    si interes < 0.01: avanzar mes y continuar
+    insertar movimiento kind='interest', amount=interes,
             accrual_month = primer día del mes, effective_date = último día del mes
     si el insert choca con credit_interest_once: break   -- otra carga ya lo hizo
     mes ← mes + 1
@@ -242,7 +244,7 @@ El proyecto no tiene runner. La matemática vive aislada en `lib/utils/credit-ma
 - `amortizedPayment` con tasa 0 y con tasa positiva
 - La cuota amortiza exactamente en el plazo cuando no hay abonos extra
 - Un abono extra acorta el plazo y **no** mueve la cuota
-- `accruedInterest` con saldo 0 y el redondeo del IVA
+- `accruedInterest` con saldo 0 y con tasa 0
 - `projectPayoff` no entra en bucle infinito cuando la cuota no cubre el interés
 
 Si se quiere red de seguridad permanente, instalar Vitest y convertirlos en tests de verdad. Queda a decisión del usuario, fuera del alcance base.
