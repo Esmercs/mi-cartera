@@ -145,6 +145,7 @@ export default async function DashboardPage({
     { data: sharedRows },
     { data: settlementsRaw },
     { data: dueCredits },
+    { data: creditSettlementsRaw },
   ] = await Promise.all([
     supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']).or(`payment_day.eq.${nextPayDay},payment_day.eq.0,payment_day.is.null`).in('interval_type', ['quincenal', 'mensual']) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.from('recurring_expenses_split').select('*').eq('is_active', true).in('ownership', [myOwnership, 'shared']).in('interval_type', ['bimestral', 'trimestral', 'anual', 'c/15 dias', 'c/21 dias']).gte('next_payment_date', nextStartStr).lte('next_payment_date', nextPeriodStr) as Promise<{ data: RecurringExpenseSplit[] | null }>,
@@ -157,6 +158,7 @@ export default async function DashboardPage({
       .in('ownership', [myOwnership, 'shared'])
       .eq('is_active', true)
       .eq('payment_day', nextPayDay) as unknown as Promise<{ data: any[] | null }>,
+    (supabase.from('credit_settlements') as any).select('*').eq('period_date', nextPeriodStr) as Promise<{ data: any[] | null }>,
   ])
   const settlements = (settlementsRaw ?? []) as any[]
   const sharedConceptSet = new Set((sharedRows ?? []).map((r: any) => r.concept))
@@ -204,12 +206,44 @@ export default async function DashboardPage({
       })
     }
   }
+  // Cuentas internas de créditos compartidos: misma mecánica que los fijos, pero su
+  // liquidación vive en credit_settlements (internal_debt_settlements ata su FK a
+  // recurring_expenses). La cuota que se reparte es la del mes, no el saldo.
+  const creditSettlementMap = new Map<string, any>()
+  for (const cs of (creditSettlementsRaw ?? []) as any[]) {
+    creditSettlementMap.set(`${cs.credit_id}|${cs.payer}`, cs)
+  }
+  const creditIOwe:   InternalRow[] = []
+  const creditOwesMe: InternalRow[] = []
+  for (const c of (dueCredits ?? []) as any[]) {
+    if (c.ownership !== 'shared') continue
+    if (c.paid_by === otherOwnership) {
+      creditIOwe.push({
+        id: c.id, concept: c.name,
+        amount: Number(isLalo ? c.lalo_payment : c.ale_payment),
+        settlement: creditSettlementMap.get(`${c.id}|${myOwnership}`) ?? null,
+      })
+    } else if (c.paid_by === myOwnership) {
+      creditOwesMe.push({
+        id: c.id, concept: c.name,
+        amount: Number(isLalo ? c.ale_payment : c.lalo_payment),
+        settlement: creditSettlementMap.get(`${c.id}|${otherOwnership}`) ?? null,
+      })
+    }
+  }
+
   const pendingIOwe   = internalIOwe.filter(x => !x.settlement)
   const paidIOwe      = internalIOwe.filter(x => x.settlement)
   const pendingOwesMe = internalOwesMe.filter(x => !x.settlement)
   const paidOwesMe    = internalOwesMe.filter(x => x.settlement)
-  const totalIOwe     = pendingIOwe.reduce((s, x) => s + x.amount, 0)
-  const totalOwesMe   = pendingOwesMe.reduce((s, x) => s + x.amount, 0)
+  const pendingCreditIOwe   = creditIOwe.filter(x => !x.settlement)
+  const paidCreditIOwe      = creditIOwe.filter(x => x.settlement)
+  const pendingCreditOwesMe = creditOwesMe.filter(x => !x.settlement)
+  const paidCreditOwesMe    = creditOwesMe.filter(x => x.settlement)
+  // Los totales del balance neto cuentan fijos + créditos: si no, el «Están a mano»
+  // mentiría en cuanto haya un crédito compartido pendiente.
+  const totalIOwe     = [...pendingIOwe,   ...pendingCreditIOwe  ].reduce((s, x) => s + x.amount, 0)
+  const totalOwesMe   = [...pendingOwesMe, ...pendingCreditOwesMe].reduce((s, x) => s + x.amount, 0)
 
   const round2 = (n: number) => Math.round(n * 100) / 100
 
@@ -716,7 +750,7 @@ export default async function DashboardPage({
       )}
 
       {/* ── Cuentas con {otherName}: recurring shared + inter-person debts unificados ── */}
-      {(internalIOwe.length > 0 || internalOwesMe.length > 0 || visibleDebtsOwed.length > 0 || visibleDebtsToCollect.length > 0) && (
+      {(internalIOwe.length > 0 || internalOwesMe.length > 0 || creditIOwe.length > 0 || creditOwesMe.length > 0 || visibleDebtsOwed.length > 0 || visibleDebtsToCollect.length > 0) && (
         <div className="space-y-3">
         {/* Balance neto de esta quincena */}
         <div className={`card p-4 flex items-center justify-between ${
@@ -738,7 +772,7 @@ export default async function DashboardPage({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Le debo a {otherName} */}
-          {(internalIOwe.length > 0 || visibleDebtsOwed.length > 0) && (
+          {(internalIOwe.length > 0 || creditIOwe.length > 0 || visibleDebtsOwed.length > 0) && (
             <div className="card p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-red-600">Le debo a {otherName}</h2>
@@ -749,7 +783,7 @@ export default async function DashboardPage({
               <div className="space-y-0">
                 {pendingIOwe.length > 0 && (
                   <>
-                    {visibleDebtsOwed.length > 0 && (
+                    {(visibleDebtsOwed.length > 0 || creditIOwe.length > 0) && (
                       <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide pt-1 pb-0.5">Gastos casa</p>
                     )}
                     {pendingIOwe.map(x => (
@@ -757,7 +791,25 @@ export default async function DashboardPage({
                         <p className="text-sm text-gray-800 truncate flex-1">{x.concept}</p>
                         <span className="text-sm font-semibold text-red-500 shrink-0">{formatMXN(x.amount)}</span>
                         <SettleInternalDebtButton
-                          recurringExpenseId={x.id}
+                          targetId={x.id}
+                          periodDate={nextPeriodStr}
+                          payer={myOwnership as 'lalo' | 'ale'}
+                          amount={x.amount}
+                        />
+                      </div>
+                    ))}
+                  </>
+                )}
+                {pendingCreditIOwe.length > 0 && (
+                  <>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide pt-2 pb-0.5">Créditos</p>
+                    {pendingCreditIOwe.map(x => (
+                      <div key={x.id} className="flex justify-between items-center py-2 border-b last:border-0 gap-2">
+                        <p className="text-sm text-gray-800 truncate flex-1">{x.concept}</p>
+                        <span className="text-sm font-semibold text-red-500 shrink-0">{formatMXN(x.amount)}</span>
+                        <SettleInternalDebtButton
+                          kind="credit"
+                          targetId={x.id}
                           periodDate={nextPeriodStr}
                           payer={myOwnership as 'lalo' | 'ale'}
                           amount={x.amount}
@@ -804,9 +856,21 @@ export default async function DashboardPage({
                   + {hiddenDebtsOwed} más con fecha posterior →
                 </a>
               )}
-              {(paidIOwe.length > 0 || paidOther.length > 0) && (
+              {(paidIOwe.length > 0 || paidCreditIOwe.length > 0 || paidOther.length > 0) && (
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Pagados</p>
+                  {paidCreditIOwe.length > 0 && (
+                    <>
+                      <p className="text-[10px] text-gray-300 uppercase tracking-wide mt-1 mb-0.5">Créditos</p>
+                      {paidCreditIOwe.map(x => (
+                        <div key={x.id} className="flex justify-between items-center py-1.5 gap-2 text-gray-400">
+                          <p className="text-xs truncate flex-1 line-through">{x.concept}</p>
+                          <span className="text-xs shrink-0">{formatMXN(x.amount)}</span>
+                          <UnsettleInternalDebtButton kind="credit" settlementId={x.settlement.id} />
+                        </div>
+                      ))}
+                    </>
+                  )}
                   {paidIOwe.length > 0 && (
                     <>
                       {paidOther.length > 0 && (
@@ -841,7 +905,7 @@ export default async function DashboardPage({
           )}
 
           {/* {otherName} me debe */}
-          {(internalOwesMe.length > 0 || visibleDebtsToCollect.length > 0) && (
+          {(internalOwesMe.length > 0 || creditOwesMe.length > 0 || visibleDebtsToCollect.length > 0) && (
             <div className="card p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-green-700">{otherName} me debe</h2>
@@ -852,13 +916,41 @@ export default async function DashboardPage({
               <div className="space-y-0">
                 {pendingOwesMe.length > 0 && (
                   <>
-                    {visibleDebtsToCollect.length > 0 && (
+                    {(visibleDebtsToCollect.length > 0 || creditOwesMe.length > 0) && (
                       <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide pt-1 pb-0.5">Gastos casa</p>
                     )}
                     {pendingOwesMe.map(x => (
-                      <div key={x.id} className="flex justify-between items-center py-2 border-b last:border-0">
-                        <p className="text-sm text-gray-800 truncate">{x.concept}</p>
+                      <div key={x.id} className="flex justify-between items-center py-2 border-b last:border-0 gap-2">
+                        <p className="text-sm text-gray-800 truncate flex-1">{x.concept}</p>
                         <span className="text-sm font-semibold text-green-600 shrink-0">{formatMXN(x.amount)}</span>
+                        {/* La liquidación es la misma fila que registraría el otro al
+                            pagar; el UNIQUE evita duplicarla si ambos la marcan. */}
+                        <SettleInternalDebtButton
+                          targetId={x.id}
+                          periodDate={nextPeriodStr}
+                          payer={otherOwnership as 'lalo' | 'ale'}
+                          amount={x.amount}
+                          label="Ya me pagó"
+                        />
+                      </div>
+                    ))}
+                  </>
+                )}
+                {pendingCreditOwesMe.length > 0 && (
+                  <>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide pt-2 pb-0.5">Créditos</p>
+                    {pendingCreditOwesMe.map(x => (
+                      <div key={x.id} className="flex justify-between items-center py-2 border-b last:border-0 gap-2">
+                        <p className="text-sm text-gray-800 truncate flex-1">{x.concept}</p>
+                        <span className="text-sm font-semibold text-green-600 shrink-0">{formatMXN(x.amount)}</span>
+                        <SettleInternalDebtButton
+                          kind="credit"
+                          targetId={x.id}
+                          periodDate={nextPeriodStr}
+                          payer={otherOwnership as 'lalo' | 'ale'}
+                          amount={x.amount}
+                          label="Ya me pagó"
+                        />
                       </div>
                     ))}
                   </>
@@ -899,16 +991,33 @@ export default async function DashboardPage({
                   + {hiddenDebtsToCollect} más con fecha posterior →
                 </a>
               )}
-              {paidOwesMe.length > 0 && (
+              {(paidOwesMe.length > 0 || paidCreditOwesMe.length > 0) && (
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{otherName} ya pagó</p>
-                  <p className="text-[10px] text-gray-300 uppercase tracking-wide mt-1 mb-0.5">Gastos casa</p>
-                  {paidOwesMe.map(x => (
-                    <div key={x.id} className="flex justify-between items-center py-1.5 gap-2 text-gray-400">
-                      <p className="text-xs truncate flex-1 line-through">{x.concept}</p>
-                      <span className="text-xs shrink-0">{formatMXN(x.amount)}</span>
-                    </div>
-                  ))}
+                  {paidOwesMe.length > 0 && (
+                    <>
+                      <p className="text-[10px] text-gray-300 uppercase tracking-wide mt-1 mb-0.5">Gastos casa</p>
+                      {paidOwesMe.map(x => (
+                        <div key={x.id} className="flex justify-between items-center py-1.5 gap-2 text-gray-400">
+                          <p className="text-xs truncate flex-1 line-through">{x.concept}</p>
+                          <span className="text-xs shrink-0">{formatMXN(x.amount)}</span>
+                          <UnsettleInternalDebtButton settlementId={x.settlement.id} />
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {paidCreditOwesMe.length > 0 && (
+                    <>
+                      <p className="text-[10px] text-gray-300 uppercase tracking-wide mt-2 mb-0.5">Créditos</p>
+                      {paidCreditOwesMe.map(x => (
+                        <div key={x.id} className="flex justify-between items-center py-1.5 gap-2 text-gray-400">
+                          <p className="text-xs truncate flex-1 line-through">{x.concept}</p>
+                          <span className="text-xs shrink-0">{formatMXN(x.amount)}</span>
+                          <UnsettleInternalDebtButton kind="credit" settlementId={x.settlement.id} />
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
             </div>
