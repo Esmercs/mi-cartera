@@ -20,3 +20,9 @@ npm-debug.log*
 
 # supabase cli — estado local del link, no va al repo
 supabase/.temp/
+
+# worktrees de claude code — copias de trabajo, no van al repo
+.claude/worktrees/
+
+# volcados de esquema de supabase — se regeneran con db dump y traen la BD entera
+remote_schema.sql
