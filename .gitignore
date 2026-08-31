@@ -17,3 +17,6 @@ npm-debug.log*
 
 # vercel
 .vercel
+
+# supabase cli — estado local del link, no va al repo
+supabase/.temp/
