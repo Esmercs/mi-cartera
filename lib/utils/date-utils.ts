@@ -1,4 +1,4 @@
-import { addDays, addMonths, addWeeks, format, parseISO, isBefore } from 'date-fns'
+import { addDays, addMonths, addWeeks, subMonths, format, parseISO, isBefore } from 'date-fns'
 import { es } from 'date-fns/locale'
 import type { IntervalType } from '@/types/database'
 
@@ -15,6 +15,17 @@ export function formatShortDate(dateStr: string | null | undefined): string {
 export function isOverdue(dateStr: string | null | undefined): boolean {
   if (!dateStr) return false
   return isBefore(parseISO(dateStr), new Date())
+}
+
+// Las cuotas de una deuda entre personas vencen cada mes: confirmar una recorre
+// el vencimiento hacia adelante y deshacerla lo regresa. Van juntas para que el
+// deshacer sea el inverso exacto del confirmar.
+export function addOneMonth(dateStr: string): string {
+  return format(addMonths(parseISO(dateStr), 1), 'yyyy-MM-dd')
+}
+
+export function subOneMonth(dateStr: string): string {
+  return format(subMonths(parseISO(dateStr), 1), 'yyyy-MM-dd')
 }
 
 export function nextPaymentDate(

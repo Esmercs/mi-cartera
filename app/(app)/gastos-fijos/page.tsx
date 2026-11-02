@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
 import { intervalLabel, formatMXDate, formatShortDate, isOverdue, getCurrentPeriodDates, getOffsetPeriodDates } from '@/lib/utils/date-utils'
-import { format } from 'date-fns'
+import { format, subDays } from 'date-fns'
 import Link from 'next/link'
 import type { RecurringExpenseSplit } from '@/types/database'
 import { monthlyEquivalent } from '@/lib/utils/financial-analysis'
@@ -14,6 +14,7 @@ import AddProjectionForm from '@/components/dashboard/add-projection-form'
 import MarkProjectionPaidButton from '@/components/dashboard/mark-projection-paid-button'
 import AddInterPersonDebtForm from '@/components/shared/add-inter-person-debt-form'
 import MarkDebtPaidButton from '@/components/shared/mark-debt-paid-button'
+import UndoDebtPaymentButton from '@/components/shared/undo-debt-payment-button'
 import EditDebtDialog from '@/components/shared/edit-debt-dialog'
 
 export default async function GastosFijosPage() {
@@ -24,6 +25,9 @@ export default async function GastosFijosPage() {
   const userId = session.user.id
   const { end } = getCurrentPeriodDates()
   const { start: nextStart, end: nextEnd, label: nextLabel } = getOffsetPeriodDates(0)
+  // Una deuda liquidada sigue a la vista un mes para poder deshacer la última
+  // cuota si se confirmó por error; después desaparece de la lista.
+  const settledSince   = format(subDays(new Date(), 30), 'yyyy-MM-dd')
   const periodDateStr  = format(end, 'yyyy-MM-dd')
   const nextStartStr   = format(nextStart, 'yyyy-MM-dd')
   const nextPeriodStr  = format(nextEnd, 'yyyy-MM-dd')
@@ -51,7 +55,7 @@ export default async function GastosFijosPage() {
     supabase.from('recurring_expenses_split').select('*').eq('is_active', true).order('next_payment_date', { ascending: true }) as Promise<{ data: RecurringExpenseSplit[] | null }>,
     supabase.from('cards').select('id, name').eq('is_active', true),
     (supabase.from('projections') as any).select('*, cards(name)').eq('owner_id', userId).eq('is_paid', false).gte('projected_date', todayStr).order('projected_date', { ascending: true }),
-    supabase.from('inter_person_debts').select('*, debtor:profiles!debtor_id(display_name, full_name), creditor:profiles!creditor_id(display_name, full_name), cards(name)').eq('is_paid', false).order('created_at', { ascending: false }),
+    supabase.from('inter_person_debts').select('*, debtor:profiles!debtor_id(display_name, full_name), creditor:profiles!creditor_id(display_name, full_name), cards(name)').or(`is_paid.eq.false,paid_at.gte.${settledSince}`).order('created_at', { ascending: false }),
   ])
 
   const proximaProjections = (allProjections ?? []).filter(
@@ -295,11 +299,16 @@ export default async function GastosFijosPage() {
             {debts.map((debt: any) => (
               <div
                 key={debt.id}
-                className="flex items-center justify-between p-3 border rounded-xl bg-gray-50"
+                className={`flex items-center justify-between p-3 border rounded-xl bg-gray-50${debt.is_paid ? ' opacity-60' : ''}`}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <p className="text-sm font-medium text-gray-800">{debt.concept}</p>
+                    {debt.is_paid && (
+                      <span className="bg-green-50 text-green-600 text-[10px] px-1.5 py-0.5 rounded">
+                        Pagada
+                      </span>
+                    )}
                     <EditDebtDialog
                       debtId={debt.id}
                       concept={debt.concept}
@@ -329,29 +338,44 @@ export default async function GastosFijosPage() {
                       {formatMXN(debt.amount)}/mes
                     </p>
                   )}
-                  {debt.due_date && (
+                  {debt.due_date && !debt.is_paid && (
                     <p className={`text-xs mt-0.5 ${isOverdue(debt.due_date) ? 'text-red-500' : 'text-gray-400'}`}>
                       Vence: {formatMXDate(debt.due_date)}
                     </p>
                   )}
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className="font-semibold text-gray-800">
-                    {debt.total_installments
-                      ? formatMXN(debt.amount * (debt.total_installments - debt.paid_installments))
-                      : formatMXN(debt.amount)}
+                  <span className={`font-semibold ${debt.is_paid ? 'text-gray-400' : 'text-gray-800'}`}>
+                    {debt.is_paid
+                      ? formatMXN(0)
+                      : debt.total_installments
+                        ? formatMXN(debt.amount * (debt.total_installments - debt.paid_installments))
+                        : formatMXN(debt.amount)}
                   </span>
                   {debt.creditor_id === userId ? (
-                    <MarkDebtPaidButton
-                      debtId={debt.id}
-                      creditorId={debt.creditor_id}
-                      totalInstallments={debt.total_installments ?? null}
-                      paidInstallments={debt.paid_installments ?? 0}
-                      dueDate={debt.due_date ?? null}
-                      concept={debt.concept}
-                      amount={debt.amount}
-                    />
-                  ) : (
+                    <>
+                      {!debt.is_paid && (
+                        <MarkDebtPaidButton
+                          debtId={debt.id}
+                          creditorId={debt.creditor_id}
+                          totalInstallments={debt.total_installments ?? null}
+                          paidInstallments={debt.paid_installments ?? 0}
+                          dueDate={debt.due_date ?? null}
+                          concept={debt.concept}
+                          amount={debt.amount}
+                        />
+                      )}
+                      <UndoDebtPaymentButton
+                        debtId={debt.id}
+                        totalInstallments={debt.total_installments ?? null}
+                        paidInstallments={debt.paid_installments ?? 0}
+                        isPaid={!!debt.is_paid}
+                        dueDate={debt.due_date ?? null}
+                        concept={debt.concept}
+                        amount={debt.amount}
+                      />
+                    </>
+                  ) : debt.is_paid ? null : (
                     // Solo quien recibe el pago (acreedor) puede confirmarlo
                     <span className="text-xs text-gray-400 bg-gray-50 border border-gray-200 px-2 py-1 rounded-lg whitespace-nowrap">
                       Confirma {debt.creditor?.display_name}

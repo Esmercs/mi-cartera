@@ -7,6 +7,7 @@ import PayInstallmentButton from './pay-installment-button'
 import DeleteExpenseButton from './delete-expense-button'
 import EditExpenseButton from './edit-expense-button'
 import MarkDebtPaidButton from '@/components/shared/mark-debt-paid-button'
+import UndoDebtPaymentButton from '@/components/shared/undo-debt-payment-button'
 
 export interface ExpenseRow {
   id: string
@@ -38,6 +39,7 @@ export interface ReceivableRow {
   paidInstallments: number
   dueDate: string | null
   amount: number
+  settled: boolean   // ya liquidada: sigue a la vista un mes por si hay que deshacerla
 }
 
 interface Props {
@@ -184,17 +186,34 @@ export default function CardExpensesGroup({
               {receivables.map(r => (
                 <div key={r.id} className="flex items-center justify-between py-2 gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-800 truncate">{r.concept}</p>
-                    <p className="text-xs text-orange-500">
-                      {r.debtorName} debe{r.cuotasLabel ? ` · ${r.cuotasLabel}` : ''}
+                    <p className={`text-sm font-medium truncate ${r.settled ? 'text-gray-400' : 'text-gray-800'}`}>
+                      {r.concept}
+                    </p>
+                    <p className={`text-xs ${r.settled ? 'text-gray-400' : 'text-orange-500'}`}>
+                      {r.settled
+                        ? `${r.debtorName} ya pagó${r.cuotasLabel ? ` · ${r.cuotasLabel}` : ''}`
+                        : `${r.debtorName} debe${r.cuotasLabel ? ` · ${r.cuotasLabel}` : ''}`}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-sm font-semibold text-orange-600">{formatMXN(r.pending)}</span>
-                    <MarkDebtPaidButton
+                    <span className={`text-sm font-semibold ${r.settled ? 'text-gray-400' : 'text-orange-600'}`}>
+                      {formatMXN(r.settled ? r.amount : r.pending)}
+                    </span>
+                    {!r.settled && (
+                      <MarkDebtPaidButton
+                        debtId={r.id}
+                        totalInstallments={r.totalInstallments}
+                        paidInstallments={r.paidInstallments}
+                        dueDate={r.dueDate}
+                        concept={r.concept}
+                        amount={r.amount}
+                      />
+                    )}
+                    <UndoDebtPaymentButton
                       debtId={r.id}
                       totalInstallments={r.totalInstallments}
                       paidInstallments={r.paidInstallments}
+                      isPaid={r.settled}
                       dueDate={r.dueDate}
                       concept={r.concept}
                       amount={r.amount}

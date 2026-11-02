@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatMXN } from '@/lib/utils/currency'
 import { formatMXDate, getCurrentPeriodDates, paydayForPeriodEnd } from '@/lib/utils/date-utils'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, subDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import type { Card, CardExpense, CardExpenseInstallment, CreditSplit, CreditMovement } from '@/types/database'
 import AddExpenseForm from '@/components/tarjetas/add-expense-form'
@@ -35,6 +35,10 @@ export default async function TarjetasPage() {
   // Devengar el interés mensual pendiente de los créditos (perezoso, idempotente)
   await accrueCreditInterest(supabase as any)
 
+  // Una deuda liquidada sigue a la vista un mes para poder deshacer la última
+  // cuota si se confirmó por error; después ya no estorba en la tarjeta.
+  const settledSince = format(subDays(new Date(), 30), 'yyyy-MM-dd')
+
   const [
     { data: cards }, { data: expenses }, { data: cardDebts },
     { data: credits }, { data: creditMovements },
@@ -47,11 +51,12 @@ export default async function TarjetasPage() {
     supabase.from('card_expenses')
       .select('*, cards(name), card_expense_installments(*)')
       .order('created_at', { ascending: false }) as unknown as Promise<{ data: CardExpense[] | null }>,
-    // Deudas entre personas cargadas a una de mis tarjetas (yo soy el acreedor)
+    // Deudas entre personas cargadas a una de mis tarjetas (yo soy el acreedor).
+    // Las pendientes, más las liquidadas hace poco para poder deshacerlas.
     supabase.from('inter_person_debts')
       .select('*, debtor:profiles!debtor_id(display_name)')
       .eq('creditor_id', userId)
-      .eq('is_paid', false)
+      .or(`is_paid.eq.false,paid_at.gte.${settledSince}`)
       .not('card_id', 'is', null) as unknown as Promise<{ data: any[] | null }>,
     // Filtrar por ownership como la query de cards: credits_split es una VISTA y en
     // Postgres una vista no hereda el RLS de su tabla base — corre con los privilegios
@@ -139,14 +144,18 @@ export default async function TarjetasPage() {
   const receivablesByCard = new Map<string, {
     id: string; concept: string; debtorName: string; pending: number
     cuotasLabel: string | null; totalInstallments: number | null; paidInstallments: number
-    dueDate: string | null; amount: number
+    dueDate: string | null; amount: number; settled: boolean
   }[]>()
   for (const d of cardDebts ?? []) {
     if (!d.card_id || linkedDebtIds.has(d.id) || !groupMap.has(d.card_id)) continue
-    const pending = d.total_installments
-      ? Math.round(d.amount * (d.total_installments - (d.paid_installments ?? 0)) * 100) / 100
-      : d.amount
-    if (pending < 0.01) continue
+    // Una deuda liquidada no debe nada: se queda a la vista solo para deshacerla
+    const settled = !!d.is_paid
+    const pending = settled
+      ? 0
+      : d.total_installments
+        ? Math.round(d.amount * (d.total_installments - (d.paid_installments ?? 0)) * 100) / 100
+        : d.amount
+    if (!settled && pending < 0.01) continue
     if (!receivablesByCard.has(d.card_id)) receivablesByCard.set(d.card_id, [])
     receivablesByCard.get(d.card_id)!.push({
       id: d.id,
@@ -160,6 +169,7 @@ export default async function TarjetasPage() {
       paidInstallments: d.paid_installments ?? 0,
       dueDate: d.due_date ?? null,
       amount: d.amount,
+      settled,
     })
   }
 

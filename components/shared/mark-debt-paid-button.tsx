@@ -4,12 +4,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatMXN } from '@/lib/utils/currency'
 import ConfirmDialog from '@/components/shared/confirm-dialog'
-
-function addOneMonth(dateStr: string): string {
-  const d = new Date(dateStr + 'T12:00:00')
-  d.setMonth(d.getMonth() + 1)
-  return d.toISOString().split('T')[0]
-}
+import { addOneMonth } from '@/lib/utils/date-utils'
 
 export default function MarkDebtPaidButton({
   debtId,
